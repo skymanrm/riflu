@@ -1,8 +1,11 @@
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   api,
   type Account,
+  type IslandGeometry,
+  type Podcast,
   type Playable,
   type Settings,
   type Station,
@@ -29,7 +32,6 @@ const el = {
 
   player: $("player"),
   who: $("who"),
-  logout: $<HTMLButtonElement>("logout"),
   cover: $<HTMLImageElement>("cover"),
   title: $("title"),
   artist: $("artist"),
@@ -43,7 +45,9 @@ const el = {
   like: $<HTMLButtonElement>("like"),
   playerError: $("player-error"),
   queueList: $<HTMLUListElement>("queue-list"),
-  toggleMini: $<HTMLButtonElement>("toggle-mini"),
+  openSearch: $<HTMLButtonElement>("open-search"),
+  openMenu: $<HTMLButtonElement>("open-menu"),
+  islandFull: $<HTMLButtonElement>("island-full"),
 
   stations: $("stations"),
   openStations: $<HTMLButtonElement>("open-stations"),
@@ -53,12 +57,22 @@ const el = {
   stationList: $<HTMLUListElement>("station-list"),
   stationsError: $("stations-error"),
 
+  search: $("search"),
+  closeSearch: $<HTMLButtonElement>("close-search"),
+  trackSearch: $<HTMLInputElement>("track-search"),
+  searchTitle: $("search-title"),
+  kindTrack: $<HTMLButtonElement>("kind-track"),
+  kindPodcast: $<HTMLButtonElement>("kind-podcast"),
+  searchList: $<HTMLUListElement>("search-list"),
+  searchError: $("search-error"),
+
   settings: $("settings"),
-  openSettings: $<HTMLButtonElement>("open-settings"),
   closeSettings: $<HTMLButtonElement>("close-settings"),
   menuBarMode: $<HTMLInputElement>("menu-bar-mode"),
   alwaysOnTop: $<HTMLInputElement>("always-on-top"),
   miniPlayer: $<HTMLInputElement>("mini-player"),
+  miniFade: $<HTMLInputElement>("mini-fade"),
+  island: $<HTMLInputElement>("island"),
   settingsError: $("settings-error"),
 };
 
@@ -66,6 +80,9 @@ const audio = new Audio();
 audio.preload = "auto";
 
 let current: Playable | null = null;
+/** False for a track picked from search: the rotor never served it, so it
+ *  gets no feedback, and the wave resumes once it ends. */
+let fromWave = true;
 /** Guards against double-reporting trackStarted when the element re-fires play. */
 let reportedStart = false;
 /** Set while advancing, so `ended` can't race a manual skip. */
@@ -80,6 +97,8 @@ let settings: Settings = {
   menuBarMode: false,
   alwaysOnTop: false,
   miniPlayer: false,
+  miniFade: false,
+  island: false,
   stationId: null,
   stationName: null,
 };
@@ -98,7 +117,7 @@ const showError = (node: HTMLElement, msg: string | null) => {
 
 /** Exactly one screen is visible at a time. */
 function show(screen: HTMLElement) {
-  for (const s of [el.login, el.player, el.stations, el.settings]) {
+  for (const s of [el.login, el.player, el.stations, el.search, el.settings]) {
     s.classList.toggle("hidden", s !== screen);
   }
 }
@@ -160,11 +179,17 @@ function applySettings(saved: Settings) {
   el.miniPlayer.checked = saved.miniPlayer;
   el.player.classList.toggle("mini", saved.miniPlayer);
   document.body.classList.toggle("mini-window", saved.miniPlayer);
-  el.toggleMini.title = saved.miniPlayer ? "Full player" : "Mini player";
+  el.miniFade.checked = saved.miniFade;
+  document.body.classList.toggle("mini-fade", saved.miniFade);
+  el.island.checked = saved.island;
+  el.player.classList.toggle("island", saved.island);
+  document.body.classList.toggle("island-window", saved.island);
+  if (saved.island) setIslandOpen(false);
+  else document.body.classList.remove("island-open");
   el.stationName.textContent = saved.stationName ?? "Моя волна";
 }
 
-el.openSettings.addEventListener("click", async () => {
+async function openSettings() {
   showError(el.settingsError, null);
   try {
     applySettings(await api.settingsGet());
@@ -172,7 +197,7 @@ el.openSettings.addEventListener("click", async () => {
     showError(el.settingsError, String(e));
   }
   show(el.settings);
-});
+}
 
 el.closeSettings.addEventListener("click", () => show(el.player));
 
@@ -188,17 +213,107 @@ el.alwaysOnTop.addEventListener("change", () => {
 
 el.miniPlayer.addEventListener("change", () => {
   const wanted = el.miniPlayer.checked;
-  saveSettings({ miniPlayer: wanted }, () => (el.miniPlayer.checked = !wanted));
+  const patch = wanted ? { miniPlayer: true, island: false } : { miniPlayer: false };
+  saveSettings(patch, () => (el.miniPlayer.checked = !wanted));
   // Settings does not fit the mini window, so shrinking leaves this screen.
   if (wanted) show(el.player);
 });
 
-// The toolbar button is the same switch, reachable without leaving the player.
-el.toggleMini.addEventListener("click", () => {
-  const wanted = !settings.miniPlayer;
-  saveSettings({ miniPlayer: wanted }, () => {});
-  if (wanted) show(el.player); // the picker and settings don't fit in mini
+el.miniFade.addEventListener("change", () => {
+  const wanted = el.miniFade.checked;
+  saveSettings({ miniFade: wanted }, () => (el.miniFade.checked = !wanted));
 });
+
+el.island.addEventListener("change", () => {
+  const wanted = el.island.checked;
+  const patch = wanted ? { island: true, miniPlayer: false } : { island: false };
+  saveSettings(patch, () => (el.island.checked = !wanted));
+  if (wanted) show(el.player);
+});
+
+// The ⋯ menu is native; its choices come back as `menu:main` events.
+el.openMenu.addEventListener("click", () => {
+  const r = el.openMenu.getBoundingClientRect();
+  api.mainMenu(r.left, r.bottom + 4).catch((e) => console.error("menu failed:", e));
+});
+
+listen<string>("menu:main", ({ payload }) => {
+  switch (payload) {
+    case "main-mini":
+      saveSettings({ miniPlayer: true, island: false }, () => {});
+      return show(el.player); // the picker and settings don't fit in mini
+    case "main-island":
+      saveSettings({ island: true, miniPlayer: false }, () => {});
+      return show(el.player);
+    case "main-settings":
+      return openSettings();
+    case "main-logout":
+      return signOut();
+  }
+});
+
+document.addEventListener("contextmenu", (e) => {
+  if (!settings.miniPlayer && !settings.island) return;
+  e.preventDefault();
+  api.miniMenu().catch((err) => console.error("mini menu failed:", err));
+});
+
+listen("menu:expand", () => leaveMini());
+
+// The fade itself is CSS; this only tracks whether the window is focused.
+document.body.classList.toggle("inactive", !document.hasFocus());
+getCurrentWindow()
+  .onFocusChanged(({ payload: focused }) => {
+    document.body.classList.toggle("inactive", !focused);
+    // A click anywhere else folds the island back into the notch.
+    if (!focused && settings.island) setIslandOpen(false);
+  })
+  .catch(() => {});
+
+// ---- island ----
+
+/** Resize first when growing and last when shrinking, so the content never
+ *  lays out for a window size it does not have yet. */
+async function setIslandOpen(open: boolean) {
+  const body = document.body.classList;
+  if (!open) body.remove("island-open");
+  let geometry: IslandGeometry | null = null;
+  try {
+    geometry = await api.islandResize(open);
+  } catch (e) {
+    console.warn("island resize failed", e);
+  }
+  if (!settings.island) return;
+  if (geometry) {
+    const root = document.documentElement;
+    root.dataset.island = geometry.notch ? "notch" : "pill";
+    root.style.setProperty("--notch-w", `${geometry.notchWidth}px`);
+    root.style.setProperty("--notch-h", `${geometry.notchHeight}px`);
+  }
+  if (open) body.add("island-open");
+}
+
+// Collapsed, a click opens it; open, a click on anything but a control closes it.
+el.player.addEventListener("click", (e) => {
+  if (!settings.island) return;
+  const target = e.target as HTMLElement | null;
+  if (target?.closest?.("button, .track")) return;
+  setIslandOpen(!document.body.classList.contains("island-open"));
+});
+
+// The island is pinned to the notch, so it must not start a window drag.
+window.addEventListener(
+  "mousedown",
+  (e) => {
+    const target = e.target as HTMLElement | null;
+    if (settings.island && !target?.closest?.("button, .track")) {
+      e.stopImmediatePropagation();
+    }
+  },
+  true,
+);
+
+el.islandFull.addEventListener("click", () => leaveMini());
 
 // ---- waves ----
 
@@ -306,7 +421,7 @@ async function pickStation(s: Station) {
   // session, so wait for it to land first.
   if (advancing) return;
 
-  if (current && reportedStart) {
+  if (current && reportedStart && fromWave) {
     // Awaited, not fired off: the rotor session is replaced below, and a skip
     // that arrives after the swap is charged to the wrong station.
     await api
@@ -331,6 +446,183 @@ async function pickStation(s: Station) {
   await advance();
 }
 
+// ---- track search ----
+
+el.openSearch.addEventListener("click", () => {
+  show(el.search);
+  showError(el.searchError, null);
+  el.trackSearch.focus();
+  el.trackSearch.select();
+});
+
+// Back steps out of an open podcast first, then out of search.
+el.closeSearch.addEventListener("click", () => {
+  if (!podcast) return show(el.player);
+  podcast = null;
+  renderResults();
+});
+
+type SearchKind = "track" | "podcast";
+let searchKind: SearchKind = "track";
+let searchTimer = 0;
+/** Bumped per query, so a slow reply cannot overwrite a newer one. */
+let searchSeq = 0;
+/** The last result list, kept so leaving a podcast does not search again. */
+let results: Track[] | Podcast[] | null = null;
+/** The podcast whose episodes are listed, if one is open. */
+let podcast: Podcast | null = null;
+
+el.trackSearch.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = window.setTimeout(runSearch, 300);
+});
+
+function setKind(kind: SearchKind) {
+  if (kind === searchKind) return;
+  searchKind = kind;
+  el.kindTrack.classList.toggle("on", kind === "track");
+  el.kindPodcast.classList.toggle("on", kind === "podcast");
+  el.trackSearch.placeholder = kind === "track" ? "Search tracks…" : "Search podcasts…";
+  el.trackSearch.focus();
+  runSearch();
+}
+
+el.kindTrack.addEventListener("click", () => setKind("track"));
+el.kindPodcast.addEventListener("click", () => setKind("podcast"));
+
+async function runSearch() {
+  const text = el.trackSearch.value.trim();
+  const seq = ++searchSeq;
+  const kind = searchKind;
+  podcast = null;
+  results = null;
+  showError(el.searchError, null);
+  if (!text) return renderResults();
+  el.searchTitle.textContent = "Search";
+  el.searchList.replaceChildren(hint("Searching…"));
+  try {
+    const found =
+      kind === "track" ? await api.searchTracks(text) : await api.searchPodcasts(text);
+    if (seq !== searchSeq) return;
+    results = found;
+    renderResults();
+  } catch (e) {
+    if (seq !== searchSeq) return;
+    el.searchList.replaceChildren();
+    showError(el.searchError, String(e));
+  }
+}
+
+function renderResults() {
+  el.searchTitle.textContent = "Search";
+  if (!results) return el.searchList.replaceChildren();
+  const rows =
+    searchKind === "track"
+      ? (results as Track[]).map((t) => trackRow(t, t.artist))
+      : (results as Podcast[]).map(podcastRow);
+  el.searchList.replaceChildren(...(rows.length ? rows : [hint("Nothing found.")]));
+}
+
+/** One list row: art, two lines of text, and a trailing note. */
+function row(artUrl: string | null, line1: string, line2: string, note: string) {
+  const li = document.createElement("li");
+  li.className = "queue-item";
+  li.dataset.tauriDragRegion = "false"; // a row is a click target, not a handle
+  li.title = `${line1} — ${line2}`;
+
+  const art = document.createElement("img");
+  art.className = "queue-art";
+  art.alt = "";
+  if (artUrl) art.src = artUrl;
+
+  const meta = document.createElement("div");
+  meta.className = "queue-meta";
+  const title = document.createElement("div");
+  title.className = "queue-title";
+  title.textContent = line1;
+  const sub = document.createElement("div");
+  sub.className = "queue-artist";
+  sub.textContent = line2;
+  meta.append(title, sub);
+
+  const time = document.createElement("span");
+  time.className = "queue-time";
+  time.textContent = note;
+
+  li.append(art, meta, time);
+  return li;
+}
+
+function trackRow(t: Track, subtitle: string) {
+  const li = row(t.coverThumbUrl, t.title, subtitle, fmt(t.durationMs / 1000));
+  if (!t.available) li.classList.add("unavailable");
+  li.addEventListener("click", () => playSearched(t));
+  return li;
+}
+
+function podcastRow(p: Podcast) {
+  const episodes = `${p.episodeCount} episode${p.episodeCount === 1 ? "" : "s"}`;
+  const li = row(p.coverThumbUrl, p.title, episodes, "");
+  li.addEventListener("click", () => openPodcast(p));
+  return li;
+}
+
+const dateFmt = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+/** List a podcast's episodes, newest first, in place of the results. */
+async function openPodcast(p: Podcast) {
+  const seq = ++searchSeq;
+  podcast = p;
+  el.searchTitle.textContent = p.title;
+  showError(el.searchError, null);
+  el.searchList.replaceChildren(hint("Loading episodes…"));
+  try {
+    const episodes = await api.podcastEpisodes(p.id);
+    if (seq !== searchSeq || podcast !== p) return;
+    const rows = episodes.map((t) =>
+      trackRow(t, t.pubDate ? dateFmt.format(new Date(t.pubDate)) : p.title),
+    );
+    el.searchList.replaceChildren(...(rows.length ? rows : [hint("No episodes yet.")]));
+    el.searchList.scrollTop = 0;
+  } catch (e) {
+    if (seq !== searchSeq) return;
+    el.searchList.replaceChildren();
+    showError(el.searchError, String(e));
+  }
+}
+
+/** Play a search result now; the wave picks up again after it. */
+async function playSearched(t: Track) {
+  if (advancing) return;
+  advancing = true;
+  show(el.player);
+  showError(el.playerError, null);
+  // The wave track being cut off counts as skipped, like pressing next.
+  if (current && reportedStart && fromWave) {
+    api
+      .waveFeedback("skip", current.track.id, audio.currentTime)
+      .catch((e) => console.warn("feedback failed", e));
+  }
+  try {
+    const item = await api.trackPlay(t);
+    current = item;
+    fromWave = false;
+    reportedStart = false;
+    failures = 0;
+    render(item);
+    audio.src = item.url;
+    await audio.play();
+  } catch (e) {
+    showError(el.playerError, String(e));
+  } finally {
+    advancing = false;
+  }
+}
+
 // The webview's own context menu only offers Reload and friends, which this
 // app has no use for. Text fields keep theirs — that one is cut/copy/paste.
 document.addEventListener("contextmenu", (e) => {
@@ -347,6 +639,10 @@ window.addEventListener(
     const target = e.target as HTMLElement | null;
     if (e.detail >= 2 && target?.closest?.("[data-tauri-drag-region]")) {
       e.stopImmediatePropagation();
+    }
+    // In the mini player the same double click opens the full player.
+    if (e.detail === 2 && settings.miniPlayer && !target?.closest?.("button, .track")) {
+      leaveMini();
     }
   },
   true,
@@ -385,13 +681,15 @@ async function enterPlayer(account: Account) {
     console.warn("settings unavailable", e);
   }
   show(el.player);
-  await advance();
+  // Load the first track but leave it paused until the user presses play.
+  await advance(null, 0, false);
 }
 
 /** Report how the current track ended, then load the next one. */
 async function advance(
   reason: "trackFinished" | "skip" | null = null,
   skipAhead = 0,
+  play = true,
 ) {
   if (advancing) return;
   advancing = true;
@@ -399,7 +697,7 @@ async function advance(
   showError(el.playerError, null);
 
   try {
-    if (reason && current) {
+    if (reason && current && fromWave) {
       // Feedback drives the wave; a failure here must not stop playback.
       api
         .waveFeedback(reason, current.track.id, audio.currentTime)
@@ -413,11 +711,12 @@ async function advance(
     }
 
     current = item;
+    fromWave = true;
     reportedStart = false;
     failures = 0;
     render(item);
     audio.src = item.url;
-    await audio.play();
+    if (play) await audio.play();
   } catch (e) {
     showError(el.playerError, String(e));
   } finally {
@@ -578,15 +877,18 @@ el.seek.addEventListener("keydown", (e) => {
 function showPlaying(playing: boolean) {
   el.playGlyph.className = `glyph ${playing ? "pause" : "play"}`;
   el.play.setAttribute("aria-label", playing ? "Pause" : "Play");
+  document.body.classList.toggle("playing", playing);
 }
 
 audio.addEventListener("playing", () => {
   showPlaying(true);
   if (!reportedStart && current) {
     reportedStart = true;
-    api.waveFeedback("trackStarted", current.track.id).catch((e) =>
-      console.warn("feedback failed", e),
-    );
+    if (fromWave) {
+      api.waveFeedback("trackStarted", current.track.id).catch((e) =>
+        console.warn("feedback failed", e),
+      );
+    }
   }
 });
 
@@ -640,7 +942,7 @@ el.like.addEventListener("click", async () => {
   }
 });
 
-el.logout.addEventListener("click", async () => {
+async function signOut() {
   audio.pause();
   audio.removeAttribute("src");
   current = null;
@@ -650,14 +952,15 @@ el.logout.addEventListener("click", async () => {
   show(el.login);
   el.loginCode.classList.add("hidden");
   el.loginStart.disabled = false;
-});
+}
 
 el.loginStart.addEventListener("click", startLogin);
 
-/** Sign-in does not fit the mini window, so returning to it expands first. */
+/** Back to the full player from the mini player or the island; sign-in
+ *  fits neither, so returning to it goes through here first. */
 async function leaveMini() {
-  if (!settings.miniPlayer) return;
-  await saveSettings({ miniPlayer: false }, () => {});
+  if (!settings.miniPlayer && !settings.island) return;
+  await saveSettings({ miniPlayer: false, island: false }, () => {});
 }
 
 // ---- boot ----

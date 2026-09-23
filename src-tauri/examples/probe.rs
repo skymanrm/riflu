@@ -2,7 +2,7 @@
 //! Signs in (or reuses the stored token), then verifies account, wave,
 //! feedback, and that a resolved stream URL serves bytes.
 
-use yamusic_lib::{api::Api, auth, store};
+use riflu_lib::{api::Api, auth, store};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             t
         }
         None => {
-            let code = auth::request_device_code(&http, "yamusic-probe").await?;
+            let code = auth::request_device_code(&http, "riflu-probe").await?;
             println!("\n  Open {}", code.verification_url);
             println!("  Enter code: {}\n", code.user_code);
             println!("  waiting for confirmation…");

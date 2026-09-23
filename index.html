@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>yamusic</title>
+    <title>Riflu</title>
   </head>
   <body>
     <main id="app">
       <!-- Sign-in -->
       <section id="login" class="screen" data-tauri-drag-region="deep">
-        <h1>yamusic</h1>
+        <h1>Riflu</h1>
         <p class="muted">A clean player for Yandex Music.</p>
 
         <button id="login-start" class="primary">Sign in with Yandex</button>
@@ -39,14 +39,15 @@
           </button>
           <span class="spacer"></span>
           <span id="who" class="muted small"></span>
-          <!-- Drawn in CSS: the box-drawing characters this would otherwise
-               use have no glyph in the system font and render blank. -->
-          <button id="toggle-mini" class="ghost small icon" title="Mini player"
-                  aria-label="Mini player">
-            <span class="mini-glyph" aria-hidden="true"></span>
+          <!-- Both glyphs are drawn in CSS: the matching characters have no
+               glyph in the system font and render blank. -->
+          <button id="open-search" class="ghost small icon" title="Search tracks"
+                  aria-label="Search tracks">
+            <span class="search-glyph" aria-hidden="true"></span>
           </button>
-          <button id="open-settings" class="ghost small" title="Settings">&#9881;</button>
-          <button id="logout" class="ghost small">Sign out</button>
+          <button id="open-menu" class="ghost small icon" title="Menu" aria-label="Menu">
+            <span class="dots-glyph" aria-hidden="true"></span>
+          </button>
         </header>
 
         <!-- Now playing: art, text, controls on one row -->
@@ -64,7 +65,14 @@
               <span id="play-glyph" class="glyph play"></span>
             </button>
             <button id="next" class="ghost" title="Next">&rarr;</button>
+            <!-- Island only: the way back to the full player. -->
+            <button id="island-full" class="ghost icon" title="Full player"
+                    aria-label="Full player">
+              <span class="full-glyph" aria-hidden="true"></span>
+            </button>
           </div>
+          <!-- Island only: shown in the collapsed strip while audio plays. -->
+          <span class="island-eq" aria-hidden="true"><i></i><i></i><i></i></span>
         </div>
 
         <div class="progress">
@@ -100,6 +108,26 @@
 
         <p id="stations-error" class="error hidden"></p>
         <ul id="station-list" class="station-list"></ul>
+      </section>
+
+      <!-- Track search -->
+      <section id="search" class="screen hidden" data-tauri-drag-region="deep">
+        <header class="topbar" data-tauri-drag-region="deep">
+          <button id="close-search" class="ghost small">&larr; Back</button>
+          <span class="spacer"></span>
+          <span id="search-title" class="wave-label search-title">Search</span>
+        </header>
+
+        <div class="segmented" role="tablist">
+          <button id="kind-track" class="on" role="tab">Tracks</button>
+          <button id="kind-podcast" role="tab">Podcasts</button>
+        </div>
+
+        <input id="track-search" class="search" type="search"
+               placeholder="Search tracks…" autocomplete="off" spellcheck="false" />
+
+        <p id="search-error" class="error hidden"></p>
+        <ul id="search-list" class="station-list"></ul>
       </section>
 
       <!-- Settings -->
@@ -142,10 +170,34 @@
           <span class="setting-text">
             <span class="setting-title">Mini player</span>
             <span class="setting-desc muted small">
-              Shrinks to artwork, track info and the base controls.
+              Shrinks to track info and the base controls. Double-click it
+              to return to the full player, or right-click it for the menu.
             </span>
           </span>
           <input type="checkbox" id="mini-player" class="switch" />
+        </label>
+
+        <label class="setting" for="mini-fade">
+          <span class="setting-text">
+            <span class="setting-title">Fade mini player when inactive</span>
+            <span class="setting-desc muted small">
+              Drops the mini player to half opacity while another window is
+              focused. Pointing at it brings it back to full.
+            </span>
+          </span>
+          <input type="checkbox" id="mini-fade" class="switch" />
+        </label>
+
+        <label class="setting only-macos" for="island">
+          <span class="setting-text">
+            <span class="setting-title">Show in the notch</span>
+            <span class="setting-desc muted small">
+              Folds the player into the notch at the top of the screen, or a
+              small pill there on displays without one. Click it to open the
+              controls; right-click it or use its expand button to return.
+            </span>
+          </span>
+          <input type="checkbox" id="island" class="switch" />
         </label>
 
         <p id="settings-error" class="error hidden"></p>

@@ -18,7 +18,7 @@ talks to the API, and update it when you learn something new.**
 make                         # lists every task
 make deps dev                # install, then app + Vite with hot reload
 make check test probe        # typecheck + build, unit tests, live API check
-make mac install             # release .app, then replace /Applications/yamusic.app
+make mac install             # release .app, then replace /Applications/Riflu.app
 npm run dev                  # Vite alone — UI work in a browser (Tauri invokes will fail)
 npx tsc --noEmit             # typecheck frontend
 
@@ -118,11 +118,11 @@ src-tauri/src/
 Yandex registers no third-party OAuth apps, so the app presents the official
 Android client's `client_id` **and `client_secret`** — both are required on the
 `/token` exchange. The consent screen therefore says "Yandex Music", not
-"yamusic". The user's password never reaches the app.
+"Riflu". The user's password never reaches the app.
 
 ### Token storage
 
-A mode-0600 file under `~/Library/Application Support/ru.fanyagin.yamusic/`,
+A mode-0600 file under `~/Library/Application Support/ru.fanyagin.riflu/`,
 **not** the keychain. macOS binds keychain ACLs to the binary's code signature,
 and `cargo build` re-signs ad-hoc with a fresh hash every time — so each rebuild
 looked like a new app and re-prompted. Moving to the keychain later is contained
@@ -191,6 +191,18 @@ Feedback failures are logged, never allowed to interrupt playback.
   rounds its own. That needs a transparent window (`macOSPrivateApi`), and the
   background has to be painted by `#app`: a background on `html` **or** `body`
   is propagated to the window canvas, where no `border-radius` can clip it.
+
+- The island (`island.rs`, macOS only) is hand-drawn: ActivityKit is
+  `@available(macOS, unavailable)` even in the macOS 27 SDK. The main window
+  is class-swapped into a non-activating `NSPanel` (`tauri-nspanel`) at level
+  27, above the menu bar, and swapped back on leave. It is the same webview
+  on purpose, so ▶ in the island is a real in-page click for WebKit.
+- The swap hides WebKit's KVO registration on the window, so any change that
+  rebuilds the frame view (titled ↔ borderless) must happen while it is the
+  original class; after the swap only the non-activating bit may flip, or
+  AppKit throws and `contentView` goes nil. Tauri's `set_always_on_top`
+  writes the floating level and would sink the island, so it is skipped
+  while the island is on.
 
 ## Unverified / open
 

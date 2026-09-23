@@ -168,6 +168,23 @@ POST /users/{uid}/likes/tracks/add-multiple
 GET  /landing3?blocks=personalplaylists,…
 ```
 
+`/search?text=…&type=track&page=0` **[V]** (2026-09-23): answers
+`{type, page, perPage, text, searchRequestId, tracks: {total, perPage, order, results}}`,
+20 per page. `results` are ordinary track objects (numeric `id`, `artists`,
+`albums`, `coverUri`, `durationMs`, `available`), and a result's id resolves
+through `download-info` like a wave track (320 kbps MP3 offered). `tracks` is
+the only block present for `type=track`.
+
+Podcasts **[V]** (2026-09-23): `/search?…&type=podcast` answers
+`{podcasts: {total, results}}`, each result an album with `type` and
+`metaType` `"podcast"` and `trackCount`. `/albums/{id}/with-tracks` returns
+every episode in one page (`pager.perPage == total`, checked up to 500),
+split across `volumes` (roughly by year), newest first (`sortOrder: "desc"`).
+Episodes are tracks with `type: "podcast-episode"`, string ids, empty
+`artists`, and a `pubDate`; they resolve through `download-info` (192 kbps
+MP3 seen). Episodes also carry `rememberPosition: true`, which is not acted on
+yet.
+
 Check `/account/status` on startup: **a free account gets previews/ads, not full tracks.** Your player must degrade gracefully or tell the user plainly.
 
 ---
@@ -372,7 +389,7 @@ Body carries `type`, `timestamp`, `from`, `trackId`, `totalPlayedSeconds`.
 ```jsonc
 // POST /rotor/station/user:onyourwave/feedback?batch-id=<batchId>
 // Content-Type: application/json
-{ "type": "trackStarted", "timestamp": 1790082872.65, "from": "yamusic", "trackId": "18697033" }
+{ "type": "trackStarted", "timestamp": 1790082872.65, "from": "riflu", "trackId": "18697033" }
 ```
 
 Ordering also matters: `radioStarted` is rejected unless a batch has already been fetched and its `batchId` is in hand. Fetch tracks first, then announce the radio. [V] The `batch-id` query parameter appeared optional in testing, but official clients send it. [V]

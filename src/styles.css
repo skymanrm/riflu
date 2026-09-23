@@ -185,21 +185,33 @@ button:disabled { opacity: 0.4; cursor: default; }
 /* Buttons whose label is a drawn shape rather than a character. */
 .ghost.icon { display: grid; place-items: center; padding: 6px; }
 
-/* A window with an inset panel: the mini player. */
-.mini-glyph {
+/* A magnifier: a ring with a short handle. */
+.search-glyph {
   display: block;
   position: relative;
-  width: 16px; height: 12px;
+  width: 11px; height: 11px;
+  margin: 0 3px 3px 0;
   border: 1.5px solid currentColor;
-  border-radius: 3px;
+  border-radius: 50%;
 }
-.mini-glyph::after {
+.search-glyph::after {
   content: "";
   position: absolute;
-  right: 1px; bottom: 1px;
-  width: 7px; height: 4px;
+  right: -5px; bottom: -3px;
+  width: 6px; height: 1.5px;
   border-radius: 1px;
   background: currentColor;
+  transform: rotate(45deg);
+}
+
+/* Three dots in a row: the overflow menu. */
+.dots-glyph {
+  display: block;
+  width: 3px; height: 3px;
+  margin: 0 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: -6px 0 currentColor, 6px 0 currentColor;
 }
 
 /* now playing */
@@ -316,8 +328,8 @@ button:disabled { opacity: 0.4; cursor: default; }
 
 .queue-empty { padding: 10px 8px; font-size: 13px; color: var(--muted); }
 
-/* --- wave picker --- */
-#stations {
+/* --- wave picker and track search --- */
+#stations, #search {
   max-width: none;
   height: 100vh;
   gap: 10px;
@@ -389,16 +401,16 @@ button:disabled { opacity: 0.4; cursor: default; }
 .station-kind { font-size: 11px; flex: 0 0 auto; }
 
 /* --- mini player --- */
-/* No window chrome and no artwork: "title · artist" on one line with the
-   progress bar under it, the controls beside, and the way back last. */
+/* No window chrome: artwork, then "title · artist" over the progress bar,
+   then the controls. The way back is the right-click menu. */
 #player.mini {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   align-content: center;
-  column-gap: 12px;
+  column-gap: 10px;
   row-gap: 4px;
-  padding: 0 16px;
+  padding: 0 12px;
 }
 
 /* The bar and the now-playing row stop being boxes, so the children that
@@ -406,13 +418,20 @@ button:disabled { opacity: 0.4; cursor: default; }
 #player.mini .topbar,
 #player.mini .now { display: contents; }
 
-#player.mini .topbar > *:not(#toggle-mini),
-#player.mini .now-art,
+#player.mini .topbar > *,
 #player.mini .queue,
 #player.mini #player-error { display: none; }
 
-#player.mini .now-meta {
+#player.mini .now-art {
   grid-column: 1;
+  grid-row: 1 / span 2;
+  width: 42px; height: 42px;
+  flex: none;
+  border-radius: 6px;
+}
+
+#player.mini .now-meta {
+  grid-column: 2;
   grid-row: 1;
   display: flex;
   align-items: baseline;
@@ -426,16 +445,16 @@ button:disabled { opacity: 0.4; cursor: default; }
   color: var(--muted);
 }
 
-#player.mini .progress { grid-column: 1; grid-row: 2; gap: 8px; }
+#player.mini .progress { grid-column: 2; grid-row: 2; gap: 6px; }
 #player.mini .time { font-size: 10px; }
 
 #player.mini .now-controls {
-  grid-column: 2;
+  grid-column: 3;
   grid-row: 1 / span 2;
   gap: 4px;
 }
 #player.mini .round { width: 34px; height: 34px; flex: 0 0 34px; }
-#player.mini .now-controls .ghost { padding: 4px 6px; font-size: 15px; }
+#player.mini .now-controls .ghost { padding: 4px 5px; font-size: 15px; }
 #player.mini .glyph.play {
   border-left-width: 13px;
   border-top-width: 8px;
@@ -447,12 +466,12 @@ button:disabled { opacity: 0.4; cursor: default; }
   border-right-width: 4px;
 }
 
-/* The way back stands apart from the playback controls. */
-#player.mini #toggle-mini {
-  grid-column: 3;
-  grid-row: 1 / span 2;
-  margin-left: 8px;
-}
+/* Optional half opacity while unfocused; the transparent macOS window lets
+   the desktop show through a faded #app. */
+body.mini-window #app { transition: opacity 0.2s; }
+body.mini-window.mini-fade.inactive #app { opacity: 0.5; }
+/* Pointing at it brings it back without having to focus it. */
+body.mini-window.mini-fade.inactive #app:hover { opacity: 1; }
 
 /* --- settings --- */
 #settings {
@@ -502,3 +521,182 @@ button:disabled { opacity: 0.4; cursor: default; }
 }
 .switch:checked { background: var(--accent); }
 .switch:checked::after { transform: translateX(17px); }
+
+/* A podcast title can be long; the Back button keeps its room. */
+.search-title {
+  min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Tracks | Podcasts switch above the search field. */
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--panel);
+}
+.segmented button {
+  flex: 1;
+  padding: 5px 0;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--muted);
+  background: transparent;
+}
+.segmented button.on { color: var(--fg); background: rgba(255, 255, 255, 0.1); }
+
+/* Search results the catalogue will not stream for this account. */
+.queue-item.unavailable { opacity: 0.45; }
+
+/* --- island --- */
+/* The window hugs the notch: a black strip either side of it when collapsed,
+   dropping below it when open. Without a notch it is a free-standing pill. */
+#island-full, .island-eq { display: none; }
+
+body.island-window #app {
+  background: #000;
+  overflow: hidden;
+  border-radius: 0 0 14px 14px;
+}
+body.island-window.island-open #app { border-radius: 0 0 22px 22px; }
+[data-island="pill"] body.island-window #app { border-radius: 16px; }
+[data-island="pill"] body.island-window.island-open #app { border-radius: 22px; }
+
+#player.island {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 10px;
+  padding: 0 12px;
+  cursor: pointer;
+}
+#player.island .topbar,
+#player.island .now { display: contents; }
+#player.island .topbar > *,
+#player.island .queue,
+#player.island #player-error,
+#player.island #like { display: none; }
+
+#player.island .now-art {
+  grid-column: 1;
+  width: 20px; height: 20px;
+  flex: none;
+  border-radius: 5px;
+}
+#player.island .now-meta { grid-column: 2; min-width: 0; }
+
+/* The window animates its frame; the content fades in once it has landed. */
+body.island-window.island-open #player.island { animation: island-open 0.22s ease-out; }
+body.island-window:not(.island-open) #player.island { animation: island-shut 0.18s ease-out; }
+@keyframes island-open {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes island-shut {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Collapsed: art and the level meter; the pill has room for the title too. */
+body.island-window:not(.island-open) #player.island .now-controls,
+body.island-window:not(.island-open) #player.island .progress,
+body.island-window:not(.island-open) #player.island .artist { display: none; }
+body.island-window:not(.island-open) #player.island .island-eq {
+  display: flex;
+  grid-column: 3;
+}
+body.island-window:not(.island-open) #player.island .title { font-size: 12px; }
+
+[data-island="notch"] body.island-window:not(.island-open) #player.island {
+  grid-template-columns: 1fr var(--notch-w) 1fr;
+  padding: 0;
+  column-gap: 0;
+}
+[data-island="notch"] body.island-window:not(.island-open) #player.island .now-meta {
+  visibility: hidden;
+}
+[data-island="notch"] body.island-window:not(.island-open) #player.island .now-art,
+[data-island="notch"] body.island-window:not(.island-open) #player.island .island-eq {
+  justify-self: center;
+}
+
+/* Open: the notch keeps the top strip, the row sits below it. */
+body.island-window.island-open #player.island {
+  grid-template-rows: auto auto;
+  row-gap: 4px;
+  align-content: center;
+  padding: 0 16px;
+}
+[data-island="notch"] body.island-window.island-open #player.island {
+  padding-top: var(--notch-h);
+}
+body.island-window.island-open #player.island .now-art {
+  grid-row: 1 / span 2;
+  width: 52px; height: 52px;
+  border-radius: 10px;
+}
+body.island-window.island-open #player.island .now-meta { grid-row: 1; align-self: end; }
+body.island-window.island-open #player.island .title { font-size: 14px; }
+body.island-window.island-open #player.island .artist { font-size: 12px; }
+body.island-window.island-open #player.island .progress {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: start;
+  gap: 6px;
+}
+body.island-window.island-open #player.island .time { font-size: 10px; }
+body.island-window.island-open #player.island .now-controls {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  gap: 2px;
+}
+body.island-window.island-open #island-full { display: grid; }
+#player.island .round { width: 36px; height: 36px; flex: 0 0 36px; }
+#player.island .now-controls .ghost { padding: 4px 6px; font-size: 16px; }
+#player.island .glyph.play {
+  border-left-width: 13px;
+  border-top-width: 8px;
+  border-bottom-width: 8px;
+}
+#player.island .glyph.pause {
+  width: 12px; height: 14px;
+  border-left-width: 4px;
+  border-right-width: 4px;
+}
+
+/* Two corners pointing outwards: back to the full window. */
+.full-glyph {
+  display: block;
+  position: relative;
+  width: 12px; height: 12px;
+}
+.full-glyph::before,
+.full-glyph::after {
+  content: "";
+  position: absolute;
+  width: 5px; height: 5px;
+  border: 1.5px solid currentColor;
+}
+.full-glyph::before { top: 0; right: 0; border-left: 0; border-bottom: 0; }
+.full-glyph::after { bottom: 0; left: 0; border-right: 0; border-top: 0; }
+
+/* Three bars that bounce while audio plays and rest flat when paused. */
+.island-eq {
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+.island-eq i {
+  width: 3px;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+body.playing .island-eq i { animation: eq 0.9s ease-in-out infinite; }
+body.playing .island-eq i:nth-child(2) { animation-delay: -0.3s; }
+body.playing .island-eq i:nth-child(3) { animation-delay: -0.6s; }
+@keyframes eq {
+  0%, 100% { height: 3px; }
+  50% { height: 12px; }
+}

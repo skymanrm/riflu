@@ -1,4 +1,4 @@
-# yamusic build tasks. `make` on its own lists them.
+# Riflu build tasks. `make` on its own lists them.
 #
 # Windows binaries cannot be cross-compiled from macOS: Tauri needs the MSVC
 # toolchain, the Windows SDK and WebView2, and even `cargo check` stops at the
@@ -13,14 +13,14 @@ else
 endif
 
 TAURI    := npm run tauri --
-APP      := src-tauri/target/release/bundle/macos/yamusic.app
-INSTALL  := /Applications/yamusic.app
+APP      := src-tauri/target/release/bundle/macos/Riflu.app
+INSTALL  := /Applications/Riflu.app
 
 .DEFAULT_GOAL := help
 .PHONY: help deps dev check test probe mac dmg install windows clean
 
 help:
-	@echo "yamusic — host: $(HOST)"
+	@echo "Riflu — host: $(HOST)"
 	@echo
 	@echo "  make deps      install npm dependencies"
 	@echo "  make dev       run the app with hot reload"

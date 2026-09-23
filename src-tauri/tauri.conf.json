@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "yamusic",
+  "productName": "Riflu",
   "version": "0.1.0",
-  "identifier": "ru.fanyagin.yamusic",
+  "identifier": "ru.fanyagin.riflu",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "yamusic",
+        "title": "Riflu",
         "width": 460,
         "height": 700,
         "minWidth": 460,

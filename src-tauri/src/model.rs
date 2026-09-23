@@ -46,10 +46,67 @@ pub struct Track {
     pub duration_ms: Option<u64>,
     #[serde(default)]
     pub available: Option<bool>,
+    /// Podcast episodes only: ISO date of release.
+    #[serde(default)]
+    pub pub_date: Option<String>,
 }
 
-/// Flattened shape handed to the frontend.
+/// `/search`; only the block matching the requested `type` is present, and
+/// none at all when nothing matched.
+#[derive(Debug, Deserialize)]
+pub struct SearchResult {
+    #[serde(default)]
+    pub tracks: Option<SearchBlock<Track>>,
+    #[serde(default)]
+    pub podcasts: Option<SearchBlock<Album>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchBlock<T> {
+    #[serde(default = "Vec::new")]
+    pub results: Vec<T>,
+}
+
+/// A podcast is an album of `type: "podcast"` whose tracks are episodes.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Album {
+    #[serde(deserialize_with = "flexible_id")]
+    pub id: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub cover_uri: Option<String>,
+    #[serde(default)]
+    pub track_count: Option<u32>,
+    /// `albums/{id}/with-tracks` only: episodes in groups, newest first.
+    #[serde(default)]
+    pub volumes: Vec<Vec<Track>>,
+}
+
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodcastView {
+    pub id: String,
+    pub title: String,
+    pub episode_count: u32,
+    pub cover_thumb_url: Option<String>,
+}
+
+impl From<&Album> for PodcastView {
+    fn from(a: &Album) -> Self {
+        PodcastView {
+            id: a.id.clone(),
+            title: a.title.clone().unwrap_or_else(|| "Untitled".into()),
+            episode_count: a.track_count.unwrap_or(0),
+            cover_thumb_url: a.cover_uri.as_ref().map(|u| cover_url(u, 100)),
+        }
+    }
+}
+
+/// Flattened shape handed to the frontend, and back from it to play a
+/// search result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackView {
     pub id: String,
@@ -60,6 +117,8 @@ pub struct TrackView {
     pub cover_thumb_url: Option<String>,
     pub duration_ms: u64,
     pub available: bool,
+    #[serde(default)]
+    pub pub_date: Option<String>,
 }
 
 impl From<&Track> for TrackView {
@@ -79,6 +138,7 @@ impl From<&Track> for TrackView {
             cover_thumb_url: t.cover_uri.as_ref().map(|u| cover_url(u, 100)),
             duration_ms: t.duration_ms.unwrap_or(0),
             available: t.available.unwrap_or(true),
+            pub_date: t.pub_date.clone(),
         }
     }
 }

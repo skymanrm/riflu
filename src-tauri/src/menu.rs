@@ -13,14 +13,14 @@ use crate::error::Result;
 
 pub fn build(app: &AppHandle) -> Result<Menu<Wry>> {
     let about = AboutMetadata {
-        name: Some("yamusic".into()),
+        name: Some("Riflu".into()),
         version: Some(env!("CARGO_PKG_VERSION").into()),
         ..Default::default()
     };
 
     let app_menu = Submenu::with_items(
         app,
-        "yamusic",
+        "Riflu",
         true,
         &[
             &PredefinedMenuItem::about(app, None, Some(about))?,

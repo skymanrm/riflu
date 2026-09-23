@@ -11,7 +11,7 @@ use crate::error::{Error, Result};
 /// `dirs::config_dir()/<identifier>` — this resolves it the same way, because
 /// the token is also read from the probe and from the 401 refresh, where there
 /// is no `AppHandle` to ask.
-const APP_DIR: &str = "ru.fanyagin.yamusic";
+const APP_DIR: &str = "ru.fanyagin.riflu";
 const FILE: &str = "token.json";
 
 fn token_path() -> Result<PathBuf> {

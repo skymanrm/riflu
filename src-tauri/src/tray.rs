@@ -5,7 +5,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 
 pub const EVT_PLAY_PAUSE: &str = "tray:play-pause";
 pub const EVT_NEXT: &str = "tray:next";
@@ -14,7 +14,7 @@ pub fn build(app: &AppHandle) -> Result<TrayIcon> {
     let play_pause = MenuItem::with_id(app, "play-pause", "Play / Pause", true, None::<&str>)?;
     let next = MenuItem::with_id(app, "next", "Next track", true, None::<&str>)?;
     let show = MenuItem::with_id(app, "show", "Show player", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit yamusic", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Riflu", true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
@@ -28,16 +28,21 @@ pub fn build(app: &AppHandle) -> Result<TrayIcon> {
         ],
     )?;
 
+    // macOS gets a monochrome silhouette to tint; the tray elsewhere shows
+    // colour, so it keeps the app icon.
+    #[cfg(target_os = "macos")]
+    let icon = tauri::include_image!("icons/tray.png");
+    #[cfg(not(target_os = "macos"))]
     let icon = app
         .default_window_icon()
         .cloned()
-        .ok_or_else(|| Error::Api("no default window icon for the tray".into()))?;
+        .ok_or_else(|| crate::error::Error::Api("no default window icon for the tray".into()))?;
 
     let tray = TrayIconBuilder::with_id("main")
         .icon(icon)
         // Render as a silhouette so it works in both light and dark menu bars.
         .icon_as_template(true)
-        .tooltip("yamusic")
+        .tooltip("Riflu")
         .menu(&menu)
         // Left click is play/pause, so the menu belongs on right click only.
         .show_menu_on_left_click(false)

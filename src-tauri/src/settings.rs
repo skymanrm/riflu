@@ -16,6 +16,10 @@ pub struct Settings {
     pub always_on_top: bool,
     /// Compact window: art, track info and the base controls only.
     pub mini_player: bool,
+    /// Mini player drops to half opacity while another window has focus.
+    pub mini_fade: bool,
+    /// macOS: live over the notch, or as a pill at the top centre without one.
+    pub island: bool,
     /// Rotor station id (`type:tag`); unset means Моя волна.
     pub station_id: Option<String>,
     /// Its display name, remembered so the label is right before the list loads.

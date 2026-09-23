@@ -15,6 +15,15 @@ export interface Track {
   coverThumbUrl: string | null;
   durationMs: number;
   available: boolean;
+  /** Podcast episodes only: ISO release date. */
+  pubDate?: string | null;
+}
+
+export interface Podcast {
+  id: string;
+  title: string;
+  episodeCount: number;
+  coverThumbUrl: string | null;
 }
 
 export interface Playable {
@@ -26,8 +35,19 @@ export interface Settings {
   menuBarMode: boolean;
   alwaysOnTop: boolean;
   miniPlayer: boolean;
+  miniFade: boolean;
+  island: boolean;
   stationId: string | null;
   stationName: string | null;
+}
+
+/** Where the island sits; `notch` is false for the free-standing pill. */
+export interface IslandGeometry {
+  notch: boolean;
+  notchWidth: number;
+  notchHeight: number;
+  width: number;
+  height: number;
 }
 
 export interface Station {
@@ -66,6 +86,10 @@ export const api = {
   waveSkipTo: (skipAhead: number) =>
     invoke<Playable | null>("wave_skip_to", { skipAhead }),
   waveRestart: () => invoke<void>("wave_restart"),
+  searchTracks: (text: string) => invoke<Track[]>("search_tracks", { text }),
+  trackPlay: (track: Track) => invoke<Playable>("track_play", { track }),
+  searchPodcasts: (text: string) => invoke<Podcast[]>("search_podcasts", { text }),
+  podcastEpisodes: (id: string) => invoke<Track[]>("podcast_episodes", { id }),
   waveFeedback: (kind: Feedback, trackId?: string, playedSeconds?: number) =>
     invoke<void>("wave_feedback", { kind, trackId, playedSeconds }),
 
@@ -75,4 +99,8 @@ export const api = {
   settingsGet: () => invoke<Settings>("settings_get"),
   settingsSet: (settings: Settings) => invoke<Settings>("settings_set", { settings }),
   showWindow: () => invoke<void>("show_window"),
+  miniMenu: () => invoke<void>("mini_menu"),
+  mainMenu: (x: number, y: number) => invoke<void>("main_menu", { x, y }),
+  islandResize: (expanded: boolean) =>
+    invoke<IslandGeometry | null>("island_resize", { expanded }),
 };

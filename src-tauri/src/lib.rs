@@ -1,6 +1,8 @@
 pub mod api;
 pub mod auth;
 pub mod error;
+#[cfg(target_os = "macos")]
+pub mod island;
 pub mod media;
 /// macOS only: Tauri installs a default menu there and nowhere else.
 #[cfg(target_os = "macos")]
@@ -15,20 +17,24 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use serde::Serialize;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIcon;
-use tauri::{AppHandle, LogicalSize, LogicalUnit, Manager, WindowEvent, WindowSizeConstraints};
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, LogicalUnit, Manager, WindowEvent,
+    WindowSizeConstraints,
+};
 use tokio::sync::{Mutex, RwLock};
 
 use api::Api;
 use auth::DeviceCode;
 use error::{Error, Result};
-use model::{AccountView, StationView, TrackView};
+use model::{AccountView, PodcastView, StationView, TrackView};
 use rotor::{WaveSession, MY_WAVE};
 use settings::Settings;
 
 /// The window is fixed-width and resizes vertically only, so each mode is one
 /// width plus a height range.
-const MINI_SIZE: (f64, f64) = (420.0, 66.0);
+const MINI_SIZE: (f64, f64) = (320.0, 66.0);
 const FULL_WIDTH: f64 = 460.0;
 const FULL_MIN_HEIGHT: f64 = 560.0;
 const FULL_HEIGHT: f64 = 700.0;
@@ -46,6 +52,9 @@ struct AppState {
     tray: std::sync::Mutex<Option<TrayIcon>>,
     /// Window height before shrinking to the mini player, to restore on expand.
     full_height: std::sync::Mutex<Option<f64>>,
+    /// The window as it was before becoming the island; set while it is one.
+    #[cfg(target_os = "macos")]
+    island: std::sync::Mutex<Option<island::Saved>>,
 }
 
 impl AppState {
@@ -97,7 +106,7 @@ async fn auth_restore(state: tauri::State<'_, AppState>) -> Result<Option<Accoun
 #[tauri::command]
 async fn auth_begin(state: tauri::State<'_, AppState>) -> Result<DeviceCode> {
     let http = reqwest::Client::new();
-    let code = auth::request_device_code(&http, "yamusic").await?;
+    let code = auth::request_device_code(&http, "Riflu").await?;
     *state.pending.lock().await = Some(code.clone());
     Ok(code)
 }
@@ -143,8 +152,16 @@ async fn settings_get(state: tauri::State<'_, AppState>) -> Result<Settings> {
 async fn settings_set(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
-    settings: Settings,
+    mut settings: Settings,
 ) -> Result<Settings> {
+    // One compact shape at a time; the island exists on macOS only.
+    if settings.island {
+        settings.mini_player = false;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        settings.island = false;
+    }
     let previous = state.settings.read().expect("settings lock").clone();
     settings::save(&app, &settings)?;
     *state.settings.write().expect("settings lock") = settings.clone();
@@ -158,6 +175,74 @@ fn show_window(app: AppHandle) {
     tray::show_window(&app);
 }
 
+/// Collapse or expand the island. `None` when it is not showing.
+#[tauri::command]
+async fn island_resize(app: AppHandle, expanded: bool) -> Result<Option<IslandGeometry>> {
+    #[cfg(target_os = "macos")]
+    {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let handle = app.clone();
+        app.run_on_main_thread(move || {
+            let on = handle.state::<AppState>().island.lock().expect("island lock").is_some();
+            let _ = tx.send(if on { island::Island::resize(&handle, expanded) } else { None });
+        })?;
+        Ok(rx.await.ok().flatten())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, expanded);
+        Ok(None)
+    }
+}
+
+#[cfg(target_os = "macos")]
+type IslandGeometry = island::Geometry;
+#[cfg(not(target_os = "macos"))]
+type IslandGeometry = ();
+
+/// Right-click menu of the mini player, which has no toolbar to hold these.
+#[tauri::command]
+async fn mini_menu(app: AppHandle, window: tauri::Window) -> Result<()> {
+    let menu = Menu::with_items(
+        &app,
+        &[
+            &MenuItem::with_id(&app, MENU_EXPAND, "Full player", true, None::<&str>)?,
+            &PredefinedMenuItem::separator(&app)?,
+            &MenuItem::with_id(&app, MENU_QUIT, "Quit Riflu", true, None::<&str>)?,
+        ],
+    )?;
+    window.popup_menu(&menu)?;
+    Ok(())
+}
+
+/// The toolbar's ⋯ menu, dropped under the button at `x`, `y` (CSS pixels).
+#[tauri::command]
+async fn main_menu(app: AppHandle, window: tauri::Window, x: f64, y: f64) -> Result<()> {
+    let mini = MenuItem::with_id(&app, MENU_MINI, "Switch to mini player", true, None::<&str>)?;
+    let settings = MenuItem::with_id(&app, MENU_SETTINGS, "Settings…", true, None::<&str>)?;
+    let logout = MenuItem::with_id(&app, MENU_LOGOUT, "Sign out", true, None::<&str>)?;
+    let menu = Menu::with_items(&app, &[&mini])?;
+    #[cfg(target_os = "macos")]
+    menu.append(&MenuItem::with_id(&app, MENU_ISLAND, "Switch to notch", true, None::<&str>)?)?;
+    menu.append_items(&[
+        &PredefinedMenuItem::separator(&app)?,
+        &settings,
+        &PredefinedMenuItem::separator(&app)?,
+        &logout,
+    ])?;
+    window.popup_menu_at(&menu, LogicalPosition::new(x, y))?;
+    Ok(())
+}
+
+const MENU_EXPAND: &str = "mini-expand";
+const MENU_QUIT: &str = "mini-quit";
+const MENU_MINI: &str = "main-mini";
+const MENU_ISLAND: &str = "main-island";
+const MENU_SETTINGS: &str = "main-settings";
+const MENU_LOGOUT: &str = "main-logout";
+/// The frontend owns the settings round-trip, so expanding is handed to it.
+const EVT_EXPAND: &str = "menu:expand";
+
 /// Everything a settings change means for the window and the tray. Only the
 /// switches that actually flipped are acted on — re-applying the mini size
 /// would undo a manual resize, and re-applying the mode steals focus.
@@ -168,11 +253,34 @@ fn apply_window(app: &AppHandle, state: &AppState, previous: &Settings, settings
         }
     }
     let Some(w) = app.get_webview_window("main") else { return };
-    if previous.always_on_top != settings.always_on_top {
+    // The island sits above the menu bar; the floating level would sink it.
+    if previous.always_on_top != settings.always_on_top && !settings.island {
         let _ = w.set_always_on_top(settings.always_on_top);
     }
     if previous.mini_player != settings.mini_player {
         apply_mini(&w, state, settings.mini_player);
+    }
+    #[cfg(target_os = "macos")]
+    if previous.island != settings.island {
+        let (handle, on, on_top) = (app.clone(), settings.island, settings.always_on_top);
+        let _ = app.run_on_main_thread(move || apply_island(&handle, on, on_top));
+    }
+}
+
+/// Main thread only: the island swaps the window's class to a panel.
+#[cfg(target_os = "macos")]
+fn apply_island(app: &AppHandle, on: bool, on_top: bool) {
+    let state = app.state::<AppState>();
+    let mut slot = state.island.lock().expect("island lock");
+    if on {
+        if slot.is_none() {
+            *slot = island::Island::enter(app);
+        }
+    } else if let Some(saved) = slot.take() {
+        island::Island::leave(app, saved);
+        if let Some(w) = app.get_webview_window("main") {
+            let _ = w.set_always_on_top(on_top);
+        }
     }
 }
 
@@ -329,6 +437,40 @@ async fn take_next(state: &AppState, skip_ahead: usize) -> Result<Option<Playabl
 }
 
 #[tauri::command]
+async fn search_tracks(state: tauri::State<'_, AppState>, text: String) -> Result<Vec<TrackView>> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(vec![]);
+    }
+    state.api().await?.search_tracks(text).await
+}
+
+#[tauri::command]
+async fn search_podcasts(
+    state: tauri::State<'_, AppState>,
+    text: String,
+) -> Result<Vec<PodcastView>> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(vec![]);
+    }
+    state.api().await?.search_podcasts(text).await
+}
+
+#[tauri::command]
+async fn podcast_episodes(state: tauri::State<'_, AppState>, id: String) -> Result<Vec<TrackView>> {
+    state.api().await?.podcast_episodes(&id).await
+}
+
+/// Play one track outside the wave. The session is left as it is, so the
+/// wave carries on from where it was once this track ends.
+#[tauri::command]
+async fn track_play(state: tauri::State<'_, AppState>, track: TrackView) -> Result<Playable> {
+    let url = state.api().await?.track_url(&track.id).await?;
+    Ok(Playable { track, url })
+}
+
+#[tauri::command]
 async fn wave_restart(state: tauri::State<'_, AppState>) -> Result<()> {
     state.wave.lock().await.reset();
     Ok(())
@@ -376,8 +518,10 @@ async fn like_track(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_nspanel::init());
+    builder
         .setup(|app| {
             let handle = app.handle().clone();
             let loaded = settings::load(&handle);
@@ -399,14 +543,31 @@ pub fn run() {
 
             let saved = state.settings.read().expect("settings lock").clone();
             if let Some(w) = handle.get_webview_window("main") {
-                let _ = w.set_always_on_top(saved.always_on_top);
+                if !saved.island {
+                    let _ = w.set_always_on_top(saved.always_on_top);
+                }
                 if saved.mini_player {
                     apply_mini(&w, &state, true);
                 }
             }
 
             app.manage(state);
+            #[cfg(target_os = "macos")]
+            if saved.island {
+                apply_island(&handle, true, saved.always_on_top);
+            }
             Ok(())
+        })
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            MENU_EXPAND => {
+                let _ = app.emit(EVT_EXPAND, ());
+            }
+            MENU_QUIT => app.exit(0),
+            // The frontend owns the settings round-trip and the screens.
+            MENU_MINI | MENU_ISLAND | MENU_SETTINGS | MENU_LOGOUT => {
+                let _ = app.emit("menu:main", event.id().as_ref());
+            }
+            _ => {}
         })
         .on_window_event(|window, event| {
             // In menu-bar mode the close button hides the window; quitting is
@@ -429,10 +590,17 @@ pub fn run() {
             settings_get,
             settings_set,
             show_window,
+            mini_menu,
+            main_menu,
+            island_resize,
             wave_next,
             wave_skip_to,
             wave_queue,
             wave_restart,
+            search_tracks,
+            search_podcasts,
+            podcast_episodes,
+            track_play,
             wave_feedback,
             like_track,
         ])

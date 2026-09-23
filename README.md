@@ -1,4 +1,4 @@
-# yamusic
+# Riflu
 
 A small, clean desktop player for Yandex Music — **Моя волна** in a window.
 
@@ -41,14 +41,14 @@ Sign in with the device-code flow: the app shows a short code, you confirm it
 at `ya.ru/device` in your real browser. Your password never touches this app.
 
 The resulting token is written next to the settings, in the per-user config
-directory — `~/Library/Application Support/ru.fanyagin.yamusic/token.json` on
-macOS (mode 0600), `%APPDATA%\ru.fanyagin.yamusic\token.json` on Windows.
+directory — `~/Library/Application Support/ru.fanyagin.riflu/token.json` on
+macOS (mode 0600), `%APPDATA%\ru.fanyagin.riflu\token.json` on Windows.
 Treat that file as the credential it is: anything running as your user can read
 it, and it grants full API access to your account until revoked at
 [yandex.ru/security/apps](https://yandex.ru/security/apps). Delete the file (or
 use **Sign out**) to remove the local copy.
 
-> The consent screen says **“Yandex Music”**, not “yamusic”. Yandex does not let
+> The consent screen says **“Yandex Music”**, not “Riflu”. Yandex does not let
 > third parties register an OAuth application, so every unofficial client
 > presents the official app's `client_id`. This is the honest cost of the
 > project — see ANALYSIS.md §1.

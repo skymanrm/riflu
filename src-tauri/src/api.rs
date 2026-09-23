@@ -36,7 +36,7 @@ impl Api {
     pub fn new(token: OAuthToken) -> Self {
         Self {
             http: reqwest::Client::builder()
-                .user_agent("yamusic/0.1")
+                .user_agent("riflu/0.1")
                 .build()
                 .expect("http client"),
             token: RwLock::new(token),
@@ -147,6 +147,50 @@ impl Api {
         media::build_direct_link(&xml)
     }
 
+    /// Track search. `/search` with `type=track` answers `{tracks: {results}}`,
+    /// and a result resolves through `download-info` like a wave track. [V]
+    pub async fn search_tracks(&self, text: &str) -> Result<Vec<TrackView>> {
+        let res = self.search(text, "track").await?;
+        let tracks = res.tracks.map(|t| t.results).unwrap_or_default();
+        Ok(tracks.iter().map(TrackView::from).collect())
+    }
+
+    /// `type=podcast` answers `{podcasts: {results}}` of podcast albums. [V]
+    pub async fn search_podcasts(&self, text: &str) -> Result<Vec<PodcastView>> {
+        let res = self.search(text, "podcast").await?;
+        let podcasts = res.podcasts.map(|p| p.results).unwrap_or_default();
+        Ok(podcasts.iter().map(PodcastView::from).collect())
+    }
+
+    async fn search(&self, text: &str, kind: &str) -> Result<SearchResult> {
+        let url = reqwest::Url::parse_with_params(
+            &format!("{BASE}/search"),
+            &[("text", text), ("type", kind), ("page", "0"), ("nocorrect", "false")],
+        )
+        .map_err(|e| Error::Api(format!("bad search url: {e}")))?;
+        self.get(url.as_str()).await
+    }
+
+    /// Every episode of a podcast, newest first. `with-tracks` returns them
+    /// all in one page (500 checked), split into volumes that are flattened
+    /// here. Episodes carry no artist, so the podcast's title stands in. [V]
+    pub async fn podcast_episodes(&self, id: &str) -> Result<Vec<TrackView>> {
+        let album: Album = self.get(&format!("{BASE}/albums/{id}/with-tracks")).await?;
+        let show = album.title.clone().unwrap_or_default();
+        Ok(album
+            .volumes
+            .iter()
+            .flatten()
+            .map(|t| {
+                let mut v = TrackView::from(t);
+                if t.artists.is_empty() {
+                    v.artist = show.clone();
+                }
+                v
+            })
+            .collect())
+    }
+
     pub async fn tracks(&self, ids: &[String]) -> Result<Vec<TrackView>> {
         if ids.is_empty() {
             return Ok(vec![]);
@@ -218,7 +262,7 @@ impl Api {
         let mut payload = serde_json::json!({
             "type": kind,
             "timestamp": timestamp,
-            "from": "yamusic",
+            "from": "riflu",
         });
         let obj = payload.as_object_mut().expect("json object");
         if let Some(t) = track_id {
