@@ -46,6 +46,9 @@ jobs:
 
       - name: Unit tests
         working-directory: src-tauri
+        # Temporary: logs why Cargo treats each crate as stale.
+        env:
+          CARGO_LOG: cargo::core::compiler::fingerprint=info
         run: cargo test --lib
 
       # The target dir persists, so drop installers left by earlier versions.
@@ -96,6 +99,9 @@ jobs:
 
       - name: Unit tests
         working-directory: src-tauri
+        # Temporary: logs why Cargo treats each crate as stale.
+        env:
+          CARGO_LOG: cargo::core::compiler::fingerprint=info
         run: cargo test --lib
 
       # .app only: the .dmg bundler drives Finder over AppleScript, which has
