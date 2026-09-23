@@ -66,3 +66,61 @@ jobs:
           name: yamusic-windows
           path: src-tauri/target/release/bundle/nsis/*-setup.exe
           if-no-files-found: error
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Rust
+        run: |
+          if ! command -v cargo >/dev/null 2>&1; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+              | sh -s -- -y --default-toolchain stable --profile minimal
+            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          else
+            rustup toolchain install stable --profile minimal
+          fi
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: macos-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: macos-cargo-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        working-directory: src-tauri
+        run: cargo test --lib
+
+      # .app only: the .dmg bundler drives Finder over AppleScript, which has
+      # no automation rights on a runner. It fails on this Mac too.
+      - name: Build app
+        run: npm run tauri build -- --bundles app
+
+      # Zipped rather than uploaded raw, so the bundle keeps its symlinks and
+      # executable bits.
+      - name: Zip the bundle
+        run: |
+          ditto -c -k --keepParent \
+            src-tauri/target/release/bundle/macos/yamusic.app yamusic-macos.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yamusic-macos
+          path: yamusic-macos.zip
+          if-no-files-found: error

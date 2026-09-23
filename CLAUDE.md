@@ -55,6 +55,11 @@ before touching anything platform-shaped:
   A `tauri.windows.conf.json` **cannot** tweak one window key: platform configs
   merge by RFC 7386, which replaces arrays wholesale, so it would have to repeat
   the entire `app.windows` entry.
+- CI is `.gitea/workflows/build.yml` — a `windows-latest` and a `macos-latest`
+  job, both needing host-mode Gitea runners. The macOS job builds `--bundles
+  app` and zips it with `ditto`: the `.dmg` bundler drives Finder over
+  AppleScript and fails without automation rights, on a runner and on a
+  developer Mac alike.
 - Layout differences are driven by `data-os` on `<html>`, set from the user
   agent before first paint. macOS overlays its window buttons on `.topbar`
   (hence the 92px gutter); Windows has its own title bar above and needs none.

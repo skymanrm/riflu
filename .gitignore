@@ -23,6 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Claude Code scratch worktrees
+.claude
+
 # Rust / Tauri
 /src-tauri/target
 /src-tauri/gen/schemas

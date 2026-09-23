@@ -53,6 +53,17 @@ use **Sign out**) to remove the local copy.
 > presents the official app's `client_id`. This is the honest cost of the
 > project — see ANALYSIS.md §1.
 
+## CI
+
+`.gitea/workflows/build.yml` builds both platforms on push to `main`, on `v*`
+tags, and on demand, uploading a Windows `*-setup.exe` and a zipped macOS
+`.app`. Each job needs a Gitea runner registered with the matching label
+(`windows-latest` / `macos-latest`) in **host** mode — a Docker label will not
+do, since both builds need the platform SDK and webview on the machine itself.
+
+Both jobs are native-arch and ad-hoc signed, so the artifacts are fine for your
+own machines and Gatekeeper-blocked on anyone else's.
+
 ## Platforms
 
 macOS is the target and the only one tested. The code is portable and Windows
