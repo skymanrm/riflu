@@ -4,6 +4,9 @@ name: build
 # Windows SDK and WebView2 — so the Windows build lives here. Needs a Gitea
 # runner registered with the `windows-latest` label, running in host mode
 # (not Docker).
+#
+# Every push and PR is typechecked and unit-tested on both platforms; the
+# installers are built only for a `v*` release tag or a manual run.
 
 on:
   push:
@@ -19,6 +22,7 @@ jobs:
     # dead absolute paths; a fixed target dir on the runner's disk does not.
     env:
       CARGO_TARGET_DIR: C:\cargo-target\yamusic
+      RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -53,14 +57,17 @@ jobs:
 
       # The target dir persists, so drop installers left by earlier versions.
       - name: Clean old bundles
+        if: env.RELEASE == 'true'
         shell: pwsh
         run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$env:CARGO_TARGET_DIR\release\bundle"
 
       # NSIS only. The MSI bundler needs WiX and buys nothing here.
       - name: Build installer
+        if: env.RELEASE == 'true'
         run: npm run tauri build -- --bundles nsis
 
       - uses: actions/upload-artifact@v4
+        if: env.RELEASE == 'true'
         with:
           name: riflu-windows
           path: ${{ env.CARGO_TARGET_DIR }}\release\bundle\nsis\*-setup.exe
@@ -68,6 +75,8 @@ jobs:
 
   macos:
     runs-on: macos-latest
+    env:
+      RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -107,16 +116,19 @@ jobs:
       # .app only: the .dmg bundler drives Finder over AppleScript, which has
       # no automation rights on a runner. It fails on this Mac too.
       - name: Build app
+        if: env.RELEASE == 'true'
         run: npm run tauri build -- --bundles app
 
       # Zipped rather than uploaded raw, so the bundle keeps its symlinks and
       # executable bits.
       - name: Zip the bundle
+        if: env.RELEASE == 'true'
         run: |
           ditto -c -k --keepParent \
             "$CARGO_TARGET_DIR/release/bundle/macos/Riflu.app" riflu-macos.zip
 
       - uses: actions/upload-artifact@v4
+        if: env.RELEASE == 'true'
         with:
           name: riflu-macos
           path: riflu-macos.zip
