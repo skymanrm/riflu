@@ -60,9 +60,11 @@ before touching anything platform-shaped:
   app` and zips it with `ditto`: the `.dmg` bundler drives Finder over
   AppleScript and fails without automation rights, on a runner and on a
   developer Mac alike.
-- Layout differences are driven by `data-os` on `<html>`, set from the user
-  agent before first paint. macOS overlays its window buttons on `.topbar`
-  (hence the 92px gutter); Windows has its own title bar above and needs none.
+- The app draws its own window buttons (notch, mini player, close) at the
+  right of `.topbar`, identical on both platforms, from one `<template>` in
+  `index.html`. Windows drops decorations in `setup`; macOS keeps its frame
+  (shadow, corners, resizing, ⌘W) and `titlebar.rs` hides the traffic lights.
+  `data-os` on `<html>` is left for platform-only copy and controls.
 
 ## Why a desktop app
 
@@ -109,6 +111,7 @@ src-tauri/src/
   rotor.rs           wave session state machine
   settings.rs        prefs JSON
   tray.rs            menu-bar icon
+  titlebar.rs        hides the macOS traffic lights (the page draws its own)
   menu.rs            app menu, minus fullscreen and zoom
   lib.rs             Tauri commands, app state, window events
 ```
@@ -184,9 +187,10 @@ Feedback failures are logged, never allowed to interrupt playback.
   `Menu::default` — the default carries View → Toggle Full Screen and
   Window → Zoom. Don't drop back to the default menu.
 - The mini player drops decorations entirely. macOS rebuilds the style mask on
-  its own schedule when they come back, wiping the overlaid title bar and the
-  disabled zoom button, so `apply_mini` re-applies both after a short delay.
-  Doing it synchronously does not stick.
+  its own schedule when they come back, wiping the overlaid title bar, the
+  disabled zoom button and the hidden traffic lights, so `apply_mini`
+  re-applies all three after a short delay. Doing it synchronously does not
+  stick. Leaving the island rebuilds the frame view too, so it re-hides them.
 - A borderless window gets no corner rounding from macOS, so the mini player
   rounds its own. That needs a transparent window (`macOSPrivateApi`), and the
   background has to be painted by `#app`: a background on `html` **or** `body`

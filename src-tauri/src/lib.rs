@@ -11,6 +11,8 @@ pub mod model;
 pub mod rotor;
 pub mod settings;
 pub mod store;
+#[cfg(target_os = "macos")]
+pub mod titlebar;
 pub mod tray;
 
 use std::collections::HashSet;
@@ -218,26 +220,20 @@ async fn mini_menu(app: AppHandle, window: tauri::Window) -> Result<()> {
 /// The toolbar's ⋯ menu, dropped under the button at `x`, `y` (CSS pixels).
 #[tauri::command]
 async fn main_menu(app: AppHandle, window: tauri::Window, x: f64, y: f64) -> Result<()> {
-    let mini = MenuItem::with_id(&app, MENU_MINI, "Switch to mini player", true, None::<&str>)?;
-    let settings = MenuItem::with_id(&app, MENU_SETTINGS, "Settings…", true, None::<&str>)?;
-    let logout = MenuItem::with_id(&app, MENU_LOGOUT, "Sign out", true, None::<&str>)?;
-    let menu = Menu::with_items(&app, &[&mini])?;
-    #[cfg(target_os = "macos")]
-    menu.append(&MenuItem::with_id(&app, MENU_ISLAND, "Switch to notch", true, None::<&str>)?)?;
-    menu.append_items(&[
-        &PredefinedMenuItem::separator(&app)?,
-        &settings,
-        &PredefinedMenuItem::separator(&app)?,
-        &logout,
-    ])?;
+    let menu = Menu::with_items(
+        &app,
+        &[
+            &MenuItem::with_id(&app, MENU_SETTINGS, "Settings…", true, None::<&str>)?,
+            &PredefinedMenuItem::separator(&app)?,
+            &MenuItem::with_id(&app, MENU_LOGOUT, "Sign out", true, None::<&str>)?,
+        ],
+    )?;
     window.popup_menu_at(&menu, LogicalPosition::new(x, y))?;
     Ok(())
 }
 
 const MENU_EXPAND: &str = "mini-expand";
 const MENU_QUIT: &str = "mini-quit";
-const MENU_MINI: &str = "main-mini";
-const MENU_ISLAND: &str = "main-island";
 const MENU_SETTINGS: &str = "main-settings";
 const MENU_LOGOUT: &str = "main-logout";
 /// The frontend owns the settings round-trip, so expanding is handed to it.
@@ -279,6 +275,7 @@ fn apply_island(app: &AppHandle, on: bool, on_top: bool) {
     } else if let Some(saved) = slot.take() {
         island::Island::leave(app, saved);
         if let Some(w) = app.get_webview_window("main") {
+            titlebar::hide_buttons(&w);
             let _ = w.set_always_on_top(on_top);
         }
     }
@@ -323,19 +320,24 @@ fn apply_mini(w: &tauri::WebviewWindow, state: &AppState, mini: bool) {
             LogicalSize::new(FULL_WIDTH, height),
         )
     };
-    // The mini player has no title bar at all.
-    let _ = w.set_decorations(!mini);
+    // The mini player has no title bar at all; elsewhere there is never one.
     #[cfg(target_os = "macos")]
-    if !mini {
-        // Restoring decorations rebuilds the style mask on macOS's own
-        // schedule, undoing the overlaid title bar and the disabled zoom
-        // button. Both have to be re-applied once that has landed.
-        let w = w.clone();
-        tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(120)).await;
-            let _ = w.set_title_bar_style(tauri::utils::TitleBarStyle::Overlay);
-            let _ = w.set_maximizable(false);
-        });
+    {
+        let _ = w.set_decorations(!mini);
+        if !mini {
+            // Restoring decorations rebuilds the style mask on macOS's own
+            // schedule, undoing the overlaid title bar, the disabled zoom
+            // button and the hidden traffic lights. All three are re-applied
+            // once that has landed.
+            let w = w.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+                let _ = w.set_title_bar_style(tauri::utils::TitleBarStyle::Overlay);
+                let _ = w.set_maximizable(false);
+                let handle = w.clone();
+                let _ = w.run_on_main_thread(move || titlebar::hide_buttons(&handle));
+            });
+        }
     }
     let _ = w.set_size_constraints(constraints);
     let _ = w.set_size(size);
@@ -543,6 +545,11 @@ pub fn run() {
 
             let saved = state.settings.read().expect("settings lock").clone();
             if let Some(w) = handle.get_webview_window("main") {
+                // The bar in the page draws the window buttons on every platform.
+                #[cfg(target_os = "macos")]
+                titlebar::hide_buttons(&w);
+                #[cfg(not(target_os = "macos"))]
+                let _ = w.set_decorations(false);
                 if !saved.island {
                     let _ = w.set_always_on_top(saved.always_on_top);
                 }
@@ -564,7 +571,7 @@ pub fn run() {
             }
             MENU_QUIT => app.exit(0),
             // The frontend owns the settings round-trip and the screens.
-            MENU_MINI | MENU_ISLAND | MENU_SETTINGS | MENU_LOGOUT => {
+            MENU_SETTINGS | MENU_LOGOUT => {
                 let _ = app.emit("menu:main", event.id().as_ref());
             }
             _ => {}

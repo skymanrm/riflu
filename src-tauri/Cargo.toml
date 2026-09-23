@@ -38,7 +38,7 @@ dirs = "6"
 tauri-nspanel = "2.1"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
-objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSScreen", "NSResponder", "NSGraphics", "NSPanel"] }
+objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSScreen", "NSResponder", "NSGraphics", "NSPanel", "NSButton", "NSControl", "NSView"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

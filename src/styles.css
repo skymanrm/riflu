@@ -82,11 +82,10 @@ button:disabled { opacity: 0.4; cursor: default; }
 .ghost:hover:not(:disabled) { color: var(--fg); background: rgba(255, 255, 255, 0.06); }
 .ghost.small { font-size: 13px; padding: 6px 10px; }
 .topbar > .ghost.small:first-child { margin-left: -10px; }
-[data-os="windows"] .topbar > .ghost.small:first-child { margin-left: 0; }
 
-/* Copy that only makes sense on one platform. */
+/* Copy and controls that only make sense on one platform. */
 [data-os="windows"] .only-macos,
-[data-os="macos"] .only-windows { display: none; }
+[data-os="macos"] .only-windows { display: none !important; }
 .ghost.on { color: var(--accent); }
 
 .round {
@@ -144,9 +143,8 @@ button:disabled { opacity: 0.4; cursor: default; }
   align-items: stretch;
 }
 
-/* On macOS the bar shares the row with the overlaid traffic lights, so it runs
-   edge to edge and keeps a gutter wide enough to clear all three. Windows keeps
-   its own title bar above the webview, so there is nothing to clear. */
+/* The bar is the window's title bar on every platform: it runs edge to edge,
+   and its window buttons sit at the right end. */
 .topbar {
   display: flex;
   align-items: center;
@@ -154,9 +152,8 @@ button:disabled { opacity: 0.4; cursor: default; }
   flex: 0 0 34px;
   height: 34px;
   margin: 0 -16px;
-  padding: 0 12px 0 92px;
+  padding: 0 8px 0 16px;
 }
-[data-os="windows"] .topbar { padding: 0 12px; }
 .wave-label { font-weight: 600; }
 
 /* The station name doubles as the picker button. */
@@ -168,7 +165,6 @@ button:disabled { opacity: 0.4; cursor: default; }
   color: var(--fg);
   font-size: 15px;
 }
-[data-os="windows"] .wave-pick { margin-left: 0; }
 .wave-pick .wave-label {
   max-width: 190px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -212,6 +208,63 @@ button:disabled { opacity: 0.4; cursor: default; }
   border-radius: 50%;
   background: currentColor;
   box-shadow: -6px 0 currentColor, 6px 0 currentColor;
+}
+
+/* --- window buttons --- */
+.window-controls { display: flex; align-items: center; gap: 2px; }
+.window-divider {
+  width: 1px; height: 16px;
+  margin-right: 6px;
+  background: rgba(255, 255, 255, 0.12);
+}
+/* Sized like the macOS close button: a 14px circle that turns red on hover. */
+.ghost.icon.window-close { padding: 3.5px; margin: 0 5px; border-radius: 50%; }
+.window-close:hover:not(:disabled) { color: #fff; background: #e81123; }
+
+.close-only > :not([data-window="close"]) { display: none; }
+.login-controls { position: fixed; top: 0; right: 8px; height: 34px; }
+
+/* A cross. */
+.close-glyph { display: block; position: relative; width: 7px; height: 7px; }
+.close-glyph::before,
+.close-glyph::after {
+  content: "";
+  position: absolute;
+  left: -1px; top: 2.75px;
+  width: 9px; height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+  transform: rotate(45deg);
+}
+.close-glyph::after { transform: rotate(-45deg); }
+
+/* A window with a small player tucked into its corner. */
+.mini-glyph,
+.notch-glyph {
+  display: block;
+  position: relative;
+  width: 14px; height: 11px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+}
+.mini-glyph::after {
+  content: "";
+  position: absolute;
+  right: 1px; bottom: 1px;
+  width: 5px; height: 3px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+/* A screen with the island floating at the top. */
+.notch-glyph::after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 1px;
+  width: 6px; height: 2.5px;
+  margin-left: -3px;
+  border-radius: 2px;
+  background: currentColor;
 }
 
 /* now playing */

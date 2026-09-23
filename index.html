@@ -6,9 +6,29 @@
     <title>Riflu</title>
   </head>
   <body>
+    <!-- The window buttons, drawn by the app so they look the same on every
+         platform. Stamped into each `.window-controls` slot by main.ts. -->
+    <template id="window-controls">
+      <span class="window-divider" aria-hidden="true"></span>
+      <button class="ghost small icon only-macos" data-window="island"
+              title="Show in the notch" aria-label="Show in the notch">
+        <span class="notch-glyph" aria-hidden="true"></span>
+      </button>
+      <button class="ghost small icon" data-window="mini"
+              title="Mini player" aria-label="Mini player">
+        <span class="mini-glyph" aria-hidden="true"></span>
+      </button>
+      <button class="ghost small icon window-close" data-window="close"
+              title="Close" aria-label="Close">
+        <span class="close-glyph" aria-hidden="true"></span>
+      </button>
+    </template>
+
     <main id="app">
       <!-- Sign-in -->
       <section id="login" class="screen" data-tauri-drag-region="deep">
+        <!-- Nothing to shrink before sign-in, so only the close button. -->
+        <div class="window-controls close-only login-controls"></div>
         <h1>Riflu</h1>
         <p class="muted">A clean player for Yandex Music.</p>
 
@@ -48,6 +68,7 @@
           <button id="open-menu" class="ghost small icon" title="Menu" aria-label="Menu">
             <span class="dots-glyph" aria-hidden="true"></span>
           </button>
+          <span class="window-controls"></span>
         </header>
 
         <!-- Now playing: art, text, controls on one row -->
@@ -101,6 +122,7 @@
           <button id="close-stations" class="ghost small">&larr; Back</button>
           <span class="spacer"></span>
           <span class="wave-label">Waves</span>
+          <span class="window-controls"></span>
         </header>
 
         <input id="station-search" class="search" type="search"
@@ -116,6 +138,7 @@
           <button id="close-search" class="ghost small">&larr; Back</button>
           <span class="spacer"></span>
           <span id="search-title" class="wave-label search-title">Search</span>
+          <span class="window-controls"></span>
         </header>
 
         <div class="segmented" role="tablist">
@@ -136,6 +159,7 @@
           <button id="close-settings" class="ghost small">&larr; Back</button>
           <span class="spacer"></span>
           <span class="wave-label">Settings</span>
+          <span class="window-controls"></span>
         </header>
 
         <label class="setting" for="menu-bar-mode">
@@ -166,17 +190,6 @@
           <input type="checkbox" id="always-on-top" class="switch" />
         </label>
 
-        <label class="setting" for="mini-player">
-          <span class="setting-text">
-            <span class="setting-title">Mini player</span>
-            <span class="setting-desc muted small">
-              Shrinks to track info and the base controls. Double-click it
-              to return to the full player, or right-click it for the menu.
-            </span>
-          </span>
-          <input type="checkbox" id="mini-player" class="switch" />
-        </label>
-
         <label class="setting" for="mini-fade">
           <span class="setting-text">
             <span class="setting-title">Fade mini player when inactive</span>
@@ -186,18 +199,6 @@
             </span>
           </span>
           <input type="checkbox" id="mini-fade" class="switch" />
-        </label>
-
-        <label class="setting only-macos" for="island">
-          <span class="setting-text">
-            <span class="setting-title">Show in the notch</span>
-            <span class="setting-desc muted small">
-              Folds the player into the notch at the top of the screen, or a
-              small pill there on displays without one. Click it to open the
-              controls; right-click it or use its expand button to return.
-            </span>
-          </span>
-          <input type="checkbox" id="island" class="switch" />
         </label>
 
         <p id="settings-error" class="error hidden"></p>

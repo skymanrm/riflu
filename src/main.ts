@@ -13,9 +13,8 @@ import {
 } from "./api";
 import "./styles.css";
 
-// The window chrome differs per platform: macOS overlays its buttons on the
-// top-left of our own bar, Windows keeps a real title bar above it. Set before
-// anything renders so the stylesheet never lays out the wrong one.
+// A few controls and some copy differ per platform (the notch is macOS only).
+// Set before anything renders so the stylesheet never shows the wrong ones.
 document.documentElement.dataset.os = navigator.userAgent.includes("Windows")
   ? "windows"
   : "macos";
@@ -70,9 +69,7 @@ const el = {
   closeSettings: $<HTMLButtonElement>("close-settings"),
   menuBarMode: $<HTMLInputElement>("menu-bar-mode"),
   alwaysOnTop: $<HTMLInputElement>("always-on-top"),
-  miniPlayer: $<HTMLInputElement>("mini-player"),
   miniFade: $<HTMLInputElement>("mini-fade"),
-  island: $<HTMLInputElement>("island"),
   settingsError: $("settings-error"),
 };
 
@@ -176,12 +173,10 @@ function applySettings(saved: Settings) {
   settings = saved;
   el.menuBarMode.checked = saved.menuBarMode;
   el.alwaysOnTop.checked = saved.alwaysOnTop;
-  el.miniPlayer.checked = saved.miniPlayer;
   el.player.classList.toggle("mini", saved.miniPlayer);
   document.body.classList.toggle("mini-window", saved.miniPlayer);
   el.miniFade.checked = saved.miniFade;
   document.body.classList.toggle("mini-fade", saved.miniFade);
-  el.island.checked = saved.island;
   el.player.classList.toggle("island", saved.island);
   document.body.classList.toggle("island-window", saved.island);
   if (saved.island) setIslandOpen(false);
@@ -211,24 +206,9 @@ el.alwaysOnTop.addEventListener("change", () => {
   saveSettings({ alwaysOnTop: wanted }, () => (el.alwaysOnTop.checked = !wanted));
 });
 
-el.miniPlayer.addEventListener("change", () => {
-  const wanted = el.miniPlayer.checked;
-  const patch = wanted ? { miniPlayer: true, island: false } : { miniPlayer: false };
-  saveSettings(patch, () => (el.miniPlayer.checked = !wanted));
-  // Settings does not fit the mini window, so shrinking leaves this screen.
-  if (wanted) show(el.player);
-});
-
 el.miniFade.addEventListener("change", () => {
   const wanted = el.miniFade.checked;
   saveSettings({ miniFade: wanted }, () => (el.miniFade.checked = !wanted));
-});
-
-el.island.addEventListener("change", () => {
-  const wanted = el.island.checked;
-  const patch = wanted ? { island: true, miniPlayer: false } : { island: false };
-  saveSettings(patch, () => (el.island.checked = !wanted));
-  if (wanted) show(el.player);
 });
 
 // The ⋯ menu is native; its choices come back as `menu:main` events.
@@ -239,16 +219,38 @@ el.openMenu.addEventListener("click", () => {
 
 listen<string>("menu:main", ({ payload }) => {
   switch (payload) {
-    case "main-mini":
-      saveSettings({ miniPlayer: true, island: false }, () => {});
-      return show(el.player); // the picker and settings don't fit in mini
-    case "main-island":
-      saveSettings({ island: true, miniPlayer: false }, () => {});
-      return show(el.player);
     case "main-settings":
       return openSettings();
     case "main-logout":
       return signOut();
+  }
+});
+
+// ---- window buttons ----
+
+// The app draws its own title-bar buttons, the same on every platform; one
+// template is stamped into each screen's bar.
+const windowControls = document.querySelector<HTMLTemplateElement>("#window-controls")!;
+for (const slot of document.querySelectorAll(".window-controls")) {
+  slot.append(windowControls.content.cloneNode(true));
+}
+
+/** Fold into the mini player or the island; the other screens fit neither. */
+function compact(patch: Partial<Settings>) {
+  saveSettings(patch, () => {});
+  show(el.player);
+}
+
+document.addEventListener("click", (e) => {
+  const button = (e.target as HTMLElement | null)?.closest?.<HTMLElement>("[data-window]");
+  switch (button?.dataset.window) {
+    case "close":
+      // Goes through CloseRequested, so menu-bar mode still hides instead.
+      return getCurrentWindow().close().catch((err) => console.error("close failed:", err));
+    case "mini":
+      return compact({ miniPlayer: true, island: false });
+    case "island":
+      return compact({ island: true, miniPlayer: false });
   }
 });
 
