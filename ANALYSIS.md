@@ -175,6 +175,11 @@ GET  /landing3?blocks=personalplaylists,…
 through `download-info` like a wave track (320 kbps MP3 offered). `tracks` is
 the only block present for `type=track`.
 
+Each search track object carries the `albums` key **twice**, with identical
+values **[V]** (2026-09-23, `text=qwe`). serde's derive rejects duplicate
+fields, so `api.rs` decodes every response through `serde_json::Value` first
+(last key wins).
+
 Podcasts **[V]** (2026-09-23): `/search?…&type=podcast` answers
 `{podcasts: {total, results}}`, each result an album with `type` and
 `metaType` `"podcast"` and `trackCount`. `/albums/{id}/with-tracks` returns

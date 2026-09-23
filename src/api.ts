@@ -101,6 +101,7 @@ export const api = {
   showWindow: () => invoke<void>("show_window"),
   miniMenu: () => invoke<void>("mini_menu"),
   mainMenu: (x: number, y: number) => invoke<void>("main_menu", { x, y }),
+  windowDrag: () => invoke<void>("window_drag"),
   islandResize: (expanded: boolean) =>
     invoke<IslandGeometry | null>("island_resize", { expanded }),
 };

@@ -104,9 +104,7 @@ impl Api {
             if !status.is_success() {
                 return Err(Error::Api(format!("{method} {url} -> {status}: {}", truncate(&body))));
             }
-            return Ok(serde_json::from_str::<Envelope<T>>(&body)
-                .map_err(|e| Error::Api(format!("unexpected response from {url}: {e}")))?
-                .result);
+            return decode(url, &body);
         }
         Err(Error::NotAuthenticated)
     }
@@ -292,6 +290,28 @@ impl Api {
     }
 }
 
+/// Via `Value`, which keeps the last of a duplicated key: `/search` repeats
+/// `albums` inside every track, and derived structs reject that.
+fn decode<T: DeserializeOwned>(url: &str, body: &str) -> Result<T> {
+    let bad = |e: serde_json::Error| Error::Api(format!("unexpected response from {url}: {e}"));
+    let value: serde_json::Value = serde_json::from_str(body).map_err(bad)?;
+    Ok(serde_json::from_value::<Envelope<T>>(value).map_err(bad)?.result)
+}
+
 fn truncate(s: &str) -> String {
     if s.len() > 300 { format!("{}…", &s[..300]) } else { s.to_string() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decode_tolerates_duplicate_keys() {
+        let body = r#"{"result":{"tracks":{"results":[
+            {"id":1,"title":"Qwe","albums":[{"title":"A"}],"albums":[{"title":"A"}]}
+        ]}}}"#;
+        let res: SearchResult = decode("test", body).unwrap();
+        assert_eq!(res.tracks.unwrap().results[0].albums[0].title.as_deref(), Some("A"));
+    }
 }

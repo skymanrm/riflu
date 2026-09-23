@@ -182,7 +182,11 @@ Feedback failures are logged, never allowed to interrupt playback.
 - The window is frameless (`titleBarStyle: Overlay`), so dragging comes from
   `data-tauri-drag-region="deep"` plus `core:window:allow-start-dragging` —
   which is **not** in `core:window:default`. `acceptFirstMouse: true` is what
-  makes the first drag on an unfocused window work at all.
+  makes the first drag on an unfocused window work at all. `main.ts` intercepts
+  the single-click drag and calls `window_drag` instead of Tauri's
+  `start_dragging`. Tauri anchors the drag on AppKit's `currentEvent`, which is
+  stale after an activating click, and the window jumps.
+  `titlebar::drag` only drags while the button is held.
 - It is fixed-width with one height per mode, so `menu.rs` replaces
   `Menu::default` — the default carries View → Toggle Full Screen and
   Window → Zoom. Don't drop back to the default menu.

@@ -177,6 +177,15 @@ fn show_window(app: AppHandle) {
     tray::show_window(&app);
 }
 
+/// Replaces Tauri's `start_dragging`, which makes the window jump on macOS.
+#[tauri::command]
+fn window_drag(window: tauri::WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    titlebar::drag(&window);
+    #[cfg(not(target_os = "macos"))]
+    let _ = window.start_dragging();
+}
+
 /// Collapse or expand the island. `None` when it is not showing.
 #[tauri::command]
 async fn island_resize(app: AppHandle, expanded: bool) -> Result<Option<IslandGeometry>> {
@@ -600,6 +609,7 @@ pub fn run() {
             mini_menu,
             main_menu,
             island_resize,
+            window_drag,
             wave_next,
             wave_skip_to,
             wave_queue,

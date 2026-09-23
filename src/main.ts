@@ -315,6 +315,41 @@ window.addEventListener(
   true,
 );
 
+/** Tauri's own drag-region rules: "deep" covers the subtree, "false" and
+ *  unmarked controls block it, a bare attribute only its own element. */
+function isDragRegion(path: EventTarget[]): boolean {
+  for (const node of path) {
+    if (!(node instanceof HTMLElement)) continue;
+    const attr = node.getAttribute("data-tauri-drag-region");
+    const clickable =
+      /^(A|BUTTON|INPUT|SELECT|TEXTAREA|LABEL|SUMMARY)$/.test(node.tagName) ||
+      (node.hasAttribute("contenteditable") && node.getAttribute("contenteditable") !== "false") ||
+      (node.hasAttribute("tabindex") && node.getAttribute("tabindex") !== "-1") ||
+      /^(button|link|menuitem|tab|checkbox|radio|switch|option)$/.test(node.getAttribute("role") ?? "");
+    if (attr === null) {
+      if (clickable) return false;
+      continue;
+    }
+    if (attr === "false") return false;
+    if (attr === "deep") return true;
+    return node === path[0];
+  }
+  return false;
+}
+
+// Tauri's drag makes the window jump on an activating click, so drags go
+// through `window_drag` instead; double clicks still reach Tauri's handler.
+window.addEventListener(
+  "mousedown",
+  (e) => {
+    if (e.button !== 0 || e.detail !== 1 || !isDragRegion(e.composedPath())) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    api.windowDrag().catch(() => {});
+  },
+  true,
+);
+
 el.islandFull.addEventListener("click", () => leaveMini());
 
 // ---- waves ----
