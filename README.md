@@ -1,6 +1,17 @@
 # Riflu
 
-A small, clean desktop player for Yandex Music — **Моя волна** in a window.
+A small, clean, **unofficial** desktop player for Yandex Music. Blazing fast,
+no ads, no useless animations, and native macOS integration right up to the
+notch.
+
+<p align="center">
+  <img src="docs/screenshots/main.png" alt="Riflu main window" width="460">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/island.png" alt="Riflu in the notch" width="400"><br>
+  <img src="docs/screenshots/mini.png" alt="Riflu mini player" width="320">
+</p>
 
 Unofficial and not affiliated with Yandex. You need your own Yandex account
 (Plus, for full tracks rather than 30-second previews).
