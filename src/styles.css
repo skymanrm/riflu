@@ -1,0 +1,504 @@
+:root {
+  --bg: #0e0e11;
+  --panel: #17171c;
+  --fg: #f2f2f5;
+  --muted: #8c8c99;
+  --accent: #ffcc00;
+  --error: #ff6b6b;
+  --radius: 14px;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+/* Artwork sits inside drag regions; let the window move, not the image. */
+img { -webkit-user-drag: none; }
+
+/* The window is transparent so the mini player can round its own corners.
+   Both the root and the body must stay transparent: a background on either is
+   propagated to the window canvas, which no border-radius can clip. `#app`
+   paints instead. */
+html, body { background: transparent; }
+
+body {
+  margin: 0;
+  color: var(--fg);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+/* Nothing in the player is meant to be selected, so nothing highlights. */
+::selection { background: transparent; }
+
+#app {
+  height: 100vh;
+  display: flex;
+  background: var(--bg);
+}
+
+/* The mini window drops its decorations, and macOS only rounds decorated
+   windows — so it rounds itself. Windows 11 rounds borderless windows on its
+   own, and the window there is not transparent, so leave it alone. */
+[data-os="macos"] body.mini-window #app {
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.screen {
+  margin: auto;
+  padding: 28px;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.spacer { flex: 1; }
+
+h1 { margin: 0; font-size: 30px; letter-spacing: -0.5px; }
+
+/* --- buttons --- */
+button {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  transition: transform 0.08s ease, opacity 0.15s ease, background 0.15s ease;
+}
+button:active { transform: scale(0.96); }
+button:disabled { opacity: 0.4; cursor: default; }
+
+.primary { background: var(--accent); color: #1a1a1a; font-weight: 600; }
+.ghost { background: transparent; color: var(--muted); font-size: 20px; }
+.ghost:hover:not(:disabled) { color: var(--fg); background: rgba(255, 255, 255, 0.06); }
+.ghost.small { font-size: 13px; padding: 6px 10px; }
+.topbar > .ghost.small:first-child { margin-left: -10px; }
+[data-os="windows"] .topbar > .ghost.small:first-child { margin-left: 0; }
+
+/* Copy that only makes sense on one platform. */
+[data-os="windows"] .only-macos,
+[data-os="macos"] .only-windows { display: none; }
+.ghost.on { color: var(--accent); }
+
+.round {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  padding: 0;
+  flex: 0 0 44px;
+}
+
+/* A triangle's visual centre sits left of its bounding box, so it is nudged
+   right; the two bars need no correction. */
+.glyph { display: block; }
+.glyph.play {
+  width: 0; height: 0;
+  border-left: 16px solid currentColor;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  transform: translateX(2.5px);
+}
+.glyph.pause {
+  width: 15px; height: 17px;
+  border-left: 5px solid currentColor;
+  border-right: 5px solid currentColor;
+}
+
+/* --- sign-in --- */
+.code-box {
+  background: var(--panel);
+  border-radius: var(--radius);
+  padding: 18px;
+  width: 100%;
+  text-align: center;
+}
+.user-code {
+  font: 600 26px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 4px;
+  margin: 10px 0;
+  -webkit-user-select: text;
+  user-select: text;
+}
+/* The sign-in code is the one thing worth copying, so it highlights. */
+.user-code::selection { background: rgba(255, 204, 0, 0.35); }
+.link { color: var(--accent); }
+.footnote { text-align: center; margin-top: 4px; }
+.error { color: var(--error); text-align: center; font-size: 13px; }
+
+/* --- player --- */
+/* Full-width column: compact now-playing row on top, queue filling the rest. */
+#player {
+  max-width: none;
+  height: 100vh;
+  gap: 12px;
+  padding: 0 16px 16px;
+  align-items: stretch;
+}
+
+/* On macOS the bar shares the row with the overlaid traffic lights, so it runs
+   edge to edge and keeps a gutter wide enough to clear all three. Windows keeps
+   its own title bar above the webview, so there is nothing to clear. */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 34px;
+  height: 34px;
+  margin: 0 -16px;
+  padding: 0 12px 0 92px;
+}
+[data-os="windows"] .topbar { padding: 0 12px; }
+.wave-label { font-weight: 600; }
+
+/* The station name doubles as the picker button. */
+.wave-pick {
+  display: flex; align-items: center; gap: 5px;
+  min-width: 0;
+  padding: 4px 8px;
+  margin-left: -8px; /* the label lines up with the gutter, not the padding */
+  color: var(--fg);
+  font-size: 15px;
+}
+[data-os="windows"] .wave-pick { margin-left: 0; }
+.wave-pick .wave-label {
+  max-width: 190px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wave-pick .caret {
+  flex: 0 0 8px;
+  width: 0; height: 0;
+  margin-top: 2px;
+  border: 4px solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--muted);
+}
+
+/* Buttons whose label is a drawn shape rather than a character. */
+.ghost.icon { display: grid; place-items: center; padding: 6px; }
+
+/* A window with an inset panel: the mini player. */
+.mini-glyph {
+  display: block;
+  position: relative;
+  width: 16px; height: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+.mini-glyph::after {
+  content: "";
+  position: absolute;
+  right: 1px; bottom: 1px;
+  width: 7px; height: 4px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+/* now playing */
+.now { display: flex; align-items: center; gap: 12px; }
+
+.now-art {
+  width: 64px; height: 64px;
+  flex: 0 0 64px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--panel);
+}
+
+.now-meta { flex: 1; min-width: 0; }
+.title {
+  font-size: 15px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.artist {
+  font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.now-controls { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
+.now-controls .ghost { padding: 6px 8px; font-size: 17px; }
+
+.progress { display: flex; align-items: center; gap: 10px; }
+.time { font-variant-numeric: tabular-nums; font-size: 11px; }
+
+.track {
+  flex: 1;
+  position: relative;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  touch-action: none;
+}
+/* A 4px line is too thin to hit, so the grab area reaches well past it. */
+.track::before { content: ""; position: absolute; inset: -9px 0; }
+.track:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+
+.fill {
+  position: relative;
+  height: 100%; width: 0;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.knob {
+  position: absolute;
+  right: -5px; top: 50%;
+  width: 10px; height: 10px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.track:hover .knob,
+.track.scrubbing .knob,
+.track:focus-visible .knob { opacity: 1; }
+
+/* queue */
+.queue { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.queue-head { text-transform: uppercase; letter-spacing: 0.6px; font-size: 11px; }
+
+.queue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.queue-item:hover { background: rgba(255, 255, 255, 0.06); }
+.queue-item:hover .queue-index { color: var(--accent); }
+
+.queue-index {
+  width: 18px;
+  flex: 0 0 18px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.queue-art {
+  width: 36px; height: 36px;
+  flex: 0 0 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--panel);
+}
+
+.queue-meta { flex: 1; min-width: 0; }
+.queue-title {
+  font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.queue-artist {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.queue-time { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.queue-empty { padding: 10px 8px; font-size: 13px; color: var(--muted); }
+
+/* --- wave picker --- */
+#stations {
+  max-width: none;
+  height: 100vh;
+  gap: 10px;
+  padding: 0 16px 16px;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.search {
+  font: inherit;
+  color: var(--fg);
+  background: var(--panel);
+  border: none;
+  border-radius: 10px;
+  padding: 9px 12px;
+  width: 100%;
+  -webkit-user-select: text;
+  user-select: text;
+  cursor: text;
+}
+.search::selection { background: rgba(255, 204, 0, 0.35); }
+.search::placeholder { color: var(--muted); }
+.search:focus { outline: 1px solid rgba(255, 255, 255, 0.18); }
+.search::-webkit-search-cancel-button { filter: invert(0.6); }
+
+.station-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.station-group {
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  font-size: 11px;
+  padding: 12px 8px 4px;
+}
+
+.station-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.station-item:hover { background: rgba(255, 255, 255, 0.06); }
+.station-item.on { color: var(--accent); }
+
+.station-art {
+  width: 30px; height: 30px;
+  flex: 0 0 30px;
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: hidden;
+  display: grid; place-items: center;
+}
+.station-art img { width: 100%; height: 100%; object-fit: cover; }
+
+.station-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.station-kind { font-size: 11px; flex: 0 0 auto; }
+
+/* --- mini player --- */
+/* No window chrome and no artwork: "title · artist" on one line with the
+   progress bar under it, the controls beside, and the way back last. */
+#player.mini {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  align-content: center;
+  column-gap: 12px;
+  row-gap: 4px;
+  padding: 0 16px;
+}
+
+/* The bar and the now-playing row stop being boxes, so the children that
+   survive can be placed on this grid directly. */
+#player.mini .topbar,
+#player.mini .now { display: contents; }
+
+#player.mini .topbar > *:not(#toggle-mini),
+#player.mini .now-art,
+#player.mini .queue,
+#player.mini #player-error { display: none; }
+
+#player.mini .now-meta {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+#player.mini .title { font-size: 13px; min-width: 0; flex: 0 1 auto; }
+#player.mini .artist { font-size: 12px; flex: 0 0 auto; max-width: 42%; }
+#player.mini .artist::before {
+  content: "·";
+  margin: 0 6px;
+  color: var(--muted);
+}
+
+#player.mini .progress { grid-column: 1; grid-row: 2; gap: 8px; }
+#player.mini .time { font-size: 10px; }
+
+#player.mini .now-controls {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  gap: 4px;
+}
+#player.mini .round { width: 34px; height: 34px; flex: 0 0 34px; }
+#player.mini .now-controls .ghost { padding: 4px 6px; font-size: 15px; }
+#player.mini .glyph.play {
+  border-left-width: 13px;
+  border-top-width: 8px;
+  border-bottom-width: 8px;
+}
+#player.mini .glyph.pause {
+  width: 12px; height: 14px;
+  border-left-width: 4px;
+  border-right-width: 4px;
+}
+
+/* The way back stands apart from the playback controls. */
+#player.mini #toggle-mini {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  margin-left: 8px;
+}
+
+/* --- settings --- */
+#settings {
+  max-width: none;
+  height: 100vh;
+  gap: 14px;
+  padding: 0 16px 16px;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.setting {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px;
+  background: var(--panel);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.setting-text { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.setting-title { font-weight: 600; font-size: 14px; }
+.setting-desc { line-height: 1.45; }
+
+/* Checkbox styled as a sliding switch. */
+.switch {
+  appearance: none;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 23px;
+  margin: 2px 0 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 17px; height: 17px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.18s ease;
+}
+.switch:checked { background: var(--accent); }
+.switch:checked::after { transform: translateX(17px); }

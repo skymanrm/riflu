@@ -1,0 +1,68 @@
+name: build
+
+# Windows binaries cannot be cross-compiled from macOS — Tauri needs MSVC, the
+# Windows SDK and WebView2 — so the Windows build lives here. Needs a Gitea
+# runner registered with the `windows-latest` label, running in host mode
+# (not Docker).
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Self-hosted runners rarely come with Rust, and rustup is a no-op when
+      # the toolchain is already there.
+      - name: Install Rust
+        shell: pwsh
+        run: |
+          if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+            Invoke-WebRequest -Uri https://win.rustup.rs/x86_64 -OutFile rustup-init.exe
+            .\rustup-init.exe -y --default-toolchain stable --profile minimal
+            "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          }
+          else { rustup toolchain install stable --profile minimal }
+
+      # Gitea ships a cache server, but it is not always reachable; a cache
+      # miss must not fail the build.
+      - name: Cache cargo
+        uses: actions/cache@v4
+        continue-on-error: true
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: windows-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: windows-cargo-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        working-directory: src-tauri
+        run: cargo test --lib
+
+      # NSIS only. The MSI bundler needs WiX and buys nothing here.
+      - name: Build installer
+        run: npm run tauri build -- --bundles nsis
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: yamusic-windows
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error

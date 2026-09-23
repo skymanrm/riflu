@@ -1,0 +1,78 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export interface Account {
+  uid: string;
+  displayName: string;
+  hasPlus: boolean;
+}
+
+export interface Track {
+  id: string;
+  title: string;
+  artist: string;
+  album: string;
+  coverUrl: string | null;
+  coverThumbUrl: string | null;
+  durationMs: number;
+  available: boolean;
+}
+
+export interface Playable {
+  track: Track;
+  url: string;
+}
+
+export interface Settings {
+  menuBarMode: boolean;
+  alwaysOnTop: boolean;
+  miniPlayer: boolean;
+  stationId: string | null;
+  stationName: string | null;
+}
+
+export interface Station {
+  id: string;
+  kind: string;
+  name: string;
+  iconUrl: string | null;
+  color: string | null;
+  /** From the personalised dashboard rather than the full catalogue. */
+  featured: boolean;
+}
+
+export interface DeviceCode {
+  device_code: string;
+  user_code: string;
+  verification_url: string;
+  interval: number;
+  expires_in: number;
+}
+
+/** Feedback kinds the rotor understands. */
+export type Feedback = "trackStarted" | "trackFinished" | "skip";
+
+export const api = {
+  authRestore: () => invoke<Account | null>("auth_restore"),
+  authBegin: () => invoke<DeviceCode>("auth_begin"),
+  authPoll: () => invoke<Account | null>("auth_poll"),
+  authLogout: () => invoke<void>("auth_logout"),
+
+  stations: () => invoke<Station[]>("stations"),
+  waveSetStation: (id: string, name: string) =>
+    invoke<Settings>("wave_set_station", { id, name }),
+
+  waveNext: () => invoke<Playable | null>("wave_next"),
+  waveQueue: () => invoke<Track[]>("wave_queue"),
+  waveSkipTo: (skipAhead: number) =>
+    invoke<Playable | null>("wave_skip_to", { skipAhead }),
+  waveRestart: () => invoke<void>("wave_restart"),
+  waveFeedback: (kind: Feedback, trackId?: string, playedSeconds?: number) =>
+    invoke<void>("wave_feedback", { kind, trackId, playedSeconds }),
+
+  likeTrack: (trackId: string, like: boolean) =>
+    invoke<void>("like_track", { trackId, like }),
+
+  settingsGet: () => invoke<Settings>("settings_get"),
+  settingsSet: (settings: Settings) => invoke<Settings>("settings_set", { settings }),
+  showWindow: () => invoke<void>("show_window"),
+};

@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>yamusic</title>
+  </head>
+  <body>
+    <main id="app">
+      <!-- Sign-in -->
+      <section id="login" class="screen" data-tauri-drag-region="deep">
+        <h1>yamusic</h1>
+        <p class="muted">A clean player for Yandex Music.</p>
+
+        <button id="login-start" class="primary">Sign in with Yandex</button>
+
+        <div id="login-code" class="code-box hidden" data-tauri-drag-region="false">
+          <p class="muted">Open this page and enter the code:</p>
+          <a id="login-url" class="link" href="#" target="_blank" rel="noreferrer"></a>
+          <div id="login-user-code" class="user-code"></div>
+          <p class="muted small">Waiting for confirmation…</p>
+        </div>
+
+        <p id="login-error" class="error hidden"></p>
+        <p class="muted small footnote">
+          Yandex has no third-party API, so the sign-in screen shows
+          “Yandex Music” rather than this app. Your password never reaches it.
+        </p>
+      </section>
+
+      <!-- Player -->
+      <section id="player" class="screen hidden">
+        <!-- "deep" drags the window from anywhere in the bar; the buttons on
+             it are clickable elements, so they keep taking their own clicks. -->
+        <header class="topbar" data-tauri-drag-region="deep">
+          <button id="open-stations" class="ghost small wave-pick" title="Choose a wave">
+            <span id="station-name" class="wave-label">Моя волна</span>
+            <span class="caret" aria-hidden="true"></span>
+          </button>
+          <span class="spacer"></span>
+          <span id="who" class="muted small"></span>
+          <!-- Drawn in CSS: the box-drawing characters this would otherwise
+               use have no glyph in the system font and render blank. -->
+          <button id="toggle-mini" class="ghost small icon" title="Mini player"
+                  aria-label="Mini player">
+            <span class="mini-glyph" aria-hidden="true"></span>
+          </button>
+          <button id="open-settings" class="ghost small" title="Settings">&#9881;</button>
+          <button id="logout" class="ghost small">Sign out</button>
+        </header>
+
+        <!-- Now playing: art, text, controls on one row -->
+        <div class="now" data-tauri-drag-region="deep">
+          <img id="cover" class="now-art" alt="" />
+          <div class="now-meta">
+            <div id="title" class="title">—</div>
+            <div id="artist" class="artist muted">—</div>
+          </div>
+          <div class="now-controls">
+            <button id="like" class="ghost" title="Like">&#9825;</button>
+            <!-- Drawn, not typed: the glyph characters sit off-centre in the
+                 circle and cannot be sized independently of the label. -->
+            <button id="play" class="primary round" title="Play/pause" aria-label="Play">
+              <span id="play-glyph" class="glyph play"></span>
+            </button>
+            <button id="next" class="ghost" title="Next">&rarr;</button>
+          </div>
+        </div>
+
+        <div class="progress">
+          <span id="elapsed" class="time muted">0:00</span>
+          <div id="seek" class="track" role="slider" aria-label="Seek"
+               aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" tabindex="0">
+            <div id="bar" class="fill"><span class="knob"></span></div>
+          </div>
+          <span id="total" class="time muted">0:00</span>
+        </div>
+
+        <p id="player-error" class="error hidden"></p>
+
+        <!-- Queued tracks. The list's empty space drags the window; the rows
+             opt out individually, since an <li> does not block dragging the
+             way a button does. -->
+        <div class="queue" data-tauri-drag-region="deep">
+          <h2 class="queue-head muted small">Up next</h2>
+          <ul id="queue-list" class="queue-list"></ul>
+        </div>
+      </section>
+
+      <!-- Wave picker -->
+      <section id="stations" class="screen hidden" data-tauri-drag-region="deep">
+        <header class="topbar" data-tauri-drag-region="deep">
+          <button id="close-stations" class="ghost small">&larr; Back</button>
+          <span class="spacer"></span>
+          <span class="wave-label">Waves</span>
+        </header>
+
+        <input id="station-search" class="search" type="search"
+               placeholder="Search waves…" autocomplete="off" spellcheck="false" />
+
+        <p id="stations-error" class="error hidden"></p>
+        <ul id="station-list" class="station-list"></ul>
+      </section>
+
+      <!-- Settings -->
+      <section id="settings" class="screen hidden" data-tauri-drag-region="deep">
+        <header class="topbar" data-tauri-drag-region="deep">
+          <button id="close-settings" class="ghost small">&larr; Back</button>
+          <span class="spacer"></span>
+          <span class="wave-label">Settings</span>
+        </header>
+
+        <label class="setting" for="menu-bar-mode">
+          <span class="setting-text">
+            <span class="setting-title only-macos">Live in the menu bar</span>
+            <span class="setting-title only-windows">Live in the tray</span>
+            <span class="setting-desc muted small only-macos">
+              Hides the Dock icon. Left-click the menu bar icon to play or
+              pause, right-click for the menu. Closing the window hides it
+              instead of quitting.
+            </span>
+            <span class="setting-desc muted small only-windows">
+              Hides the taskbar button. Left-click the tray icon to play or
+              pause, right-click for the menu. Closing the window hides it
+              instead of quitting.
+            </span>
+          </span>
+          <input type="checkbox" id="menu-bar-mode" class="switch" />
+        </label>
+
+        <label class="setting" for="always-on-top">
+          <span class="setting-text">
+            <span class="setting-title">Always on top</span>
+            <span class="setting-desc muted small">
+              Keeps the window floating above other apps.
+            </span>
+          </span>
+          <input type="checkbox" id="always-on-top" class="switch" />
+        </label>
+
+        <label class="setting" for="mini-player">
+          <span class="setting-text">
+            <span class="setting-title">Mini player</span>
+            <span class="setting-desc muted small">
+              Shrinks to artwork, track info and the base controls.
+            </span>
+          </span>
+          <input type="checkbox" id="mini-player" class="switch" />
+        </label>
+
+        <p id="settings-error" class="error hidden"></p>
+      </section>
+
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
