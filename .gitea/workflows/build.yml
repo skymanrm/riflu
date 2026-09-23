@@ -15,6 +15,10 @@ on:
 jobs:
   windows:
     runs-on: windows-latest
+    # Host mode gives each job a new random workdir, so a cached target/ keeps
+    # dead absolute paths; a fixed target dir on the runner's disk does not.
+    env:
+      CARGO_TARGET_DIR: C:\cargo-target\yamusic
     steps:
       - uses: actions/checkout@v4
 
@@ -34,19 +38,6 @@ jobs:
           }
           else { rustup toolchain install stable --profile minimal }
 
-      # Gitea ships a cache server, but it is not always reachable; a cache
-      # miss must not fail the build.
-      - name: Cache cargo
-        uses: actions/cache@v4
-        continue-on-error: true
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: windows-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: windows-cargo-
-
       - name: Install dependencies
         run: npm ci
 
@@ -57,6 +48,11 @@ jobs:
         working-directory: src-tauri
         run: cargo test --lib
 
+      # The target dir persists, so drop installers left by earlier versions.
+      - name: Clean old bundles
+        shell: pwsh
+        run: Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$env:CARGO_TARGET_DIR\release\bundle"
+
       # NSIS only. The MSI bundler needs WiX and buys nothing here.
       - name: Build installer
         run: npm run tauri build -- --bundles nsis
@@ -64,7 +60,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: yamusic-windows
-          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          path: ${{ env.CARGO_TARGET_DIR }}\release\bundle\nsis\*-setup.exe
           if-no-files-found: error
 
   macos:
@@ -86,16 +82,11 @@ jobs:
             rustup toolchain install stable --profile minimal
           fi
 
-      - name: Cache cargo
-        uses: actions/cache@v4
-        continue-on-error: true
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: macos-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
-          restore-keys: macos-cargo-
+      # Same host-mode workdir issue as Windows: keep target/ at a fixed path.
+      - name: Set target dir
+        run: |
+          echo "CARGO_TARGET_DIR=$HOME/Library/Caches/cargo-target/yamusic" >> "$GITHUB_ENV"
+          rm -rf "$HOME/Library/Caches/cargo-target/yamusic/release/bundle"
 
       - name: Install dependencies
         run: npm ci
@@ -117,7 +108,7 @@ jobs:
       - name: Zip the bundle
         run: |
           ditto -c -k --keepParent \
-            src-tauri/target/release/bundle/macos/yamusic.app yamusic-macos.zip
+            "$CARGO_TARGET_DIR/release/bundle/macos/yamusic.app" yamusic-macos.zip
 
       - uses: actions/upload-artifact@v4
         with:
