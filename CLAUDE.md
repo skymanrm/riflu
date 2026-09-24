@@ -38,7 +38,7 @@ the app does, which matters (see rotor ordering below).
 
 ## Platforms
 
-macOS is the target; Windows compiles but has never been run. Things to know
+macOS is the primary target; Windows builds and runs. Things to know
 before touching anything platform-shaped:
 
 - **Windows cannot be cross-compiled from macOS.** Tauri needs MSVC, the

@@ -75,19 +75,28 @@ do, since both builds need the platform SDK and webview on the machine itself.
 Both jobs are native-arch and ad-hoc signed, so the artifacts are fine for your
 own machines and Gatekeeper-blocked on anyone else's.
 
+## Releases
+
+Publishing a GitHub release runs `.github/workflows/release.yml`, which builds
+a universal macOS `.app` (zipped) and a Windows NSIS installer and attaches both
+to the release. The version is taken from the tag (`v1.2.3` → `1.2.3`), so the
+tag must be semver. Builds are unsigned: on macOS open the app with right-click
+→ Open the first time; on Windows SmartScreen will warn about an unknown
+publisher.
+
 ## Platforms
 
-macOS is the target and the only one tested. The code is portable and Windows
-is wired up, but nobody has run it there yet:
+Runs on macOS and Windows. The notch island is macOS-only; the rest works the
+same on both, with a few differences:
 
 - **Windows cannot be built from macOS.** Tauri needs the MSVC toolchain, the
   Windows SDK and WebView2 — even `cargo check --target x86_64-pc-windows-msvc`
   stops at the missing `llvm-rc`. `make windows` refuses to run anywhere but a
   Windows host.
-- The window chrome differs. macOS overlays its buttons on our own top bar;
-  Windows keeps a real title bar above the webview, so the wave name sits below
-  it rather than beside the window buttons. The frontend tags `<html>` with
-  `data-os` and the stylesheet lays out accordingly.
+- The app draws its own window buttons at the right of the top bar on both
+  platforms. Windows drops the native decorations entirely; macOS keeps its
+  frame (shadow, corners, resizing) with the traffic lights hidden. `<html>`
+  carries `data-os` for the few platform-only controls.
 - "Live in the menu bar" becomes "Live in the tray" and hides the taskbar
   button instead of the Dock icon.
 - No app menu on Windows: Tauri only installs one on macOS, and half the items
