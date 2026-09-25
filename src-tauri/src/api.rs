@@ -145,12 +145,28 @@ impl Api {
         media::build_direct_link(&xml)
     }
 
-    /// Track search. `/search` with `type=track` answers `{tracks: {results}}`,
-    /// and a result resolves through `download-info` like a wave track. [V]
-    pub async fn search_tracks(&self, text: &str) -> Result<Vec<TrackView>> {
-        let res = self.search(text, "track").await?;
-        let tracks = res.tracks.map(|t| t.results).unwrap_or_default();
-        Ok(tracks.iter().map(TrackView::from).collect())
+    /// Music search. `type=all` answers every block at once (artists and
+    /// albums 10 each, tracks 20); only those three are kept. [V]
+    pub async fn search_all(&self, text: &str) -> Result<SearchAllView> {
+        let res = self.search(text, "all").await?;
+        Ok(SearchAllView {
+            artists: SearchBlock::views(&res.artists),
+            albums: SearchBlock::views(&res.albums),
+            tracks: SearchBlock::views(&res.tracks),
+        })
+    }
+
+    /// An artist's tracks, most popular first. [V]
+    pub async fn artist_tracks(&self, id: &str) -> Result<Vec<TrackView>> {
+        #[derive(Deserialize)]
+        struct Page {
+            #[serde(default)]
+            tracks: Vec<Track>,
+        }
+        let page: Page = self
+            .get(&format!("{BASE}/artists/{id}/tracks?page=0&page-size=50"))
+            .await?;
+        Ok(page.tracks.iter().map(TrackView::from).collect())
     }
 
     /// `type=podcast` answers `{podcasts: {results}}` of podcast albums. [V]
@@ -169,10 +185,11 @@ impl Api {
         self.get(url.as_str()).await
     }
 
-    /// Every episode of a podcast, newest first. `with-tracks` returns them
-    /// all in one page (500 checked), split into volumes that are flattened
-    /// here. Episodes carry no artist, so the podcast's title stands in. [V]
-    pub async fn podcast_episodes(&self, id: &str) -> Result<Vec<TrackView>> {
+    /// Every track of an album, or every episode of a podcast, newest first.
+    /// `with-tracks` returns them all in one page (500 checked), split into
+    /// volumes that are flattened here. Episodes carry no artist, so the
+    /// podcast's title stands in. [V]
+    pub async fn album_tracks(&self, id: &str) -> Result<Vec<TrackView>> {
         let album: Album = self.get(&format!("{BASE}/albums/{id}/with-tracks")).await?;
         let show = album.title.clone().unwrap_or_default();
         Ok(album

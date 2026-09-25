@@ -4,9 +4,12 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   api,
   type Account,
+  type Album,
+  type Artist,
   type IslandGeometry,
   type Podcast,
   type Playable,
+  type SearchAll,
   type Settings,
   type Station,
   type Track,
@@ -60,7 +63,7 @@ const el = {
   closeSearch: $<HTMLButtonElement>("close-search"),
   trackSearch: $<HTMLInputElement>("track-search"),
   searchTitle: $("search-title"),
-  kindTrack: $<HTMLButtonElement>("kind-track"),
+  kindMusic: $<HTMLButtonElement>("kind-music"),
   kindPodcast: $<HTMLButtonElement>("kind-podcast"),
   searchList: $<HTMLUListElement>("search-list"),
   searchError: $("search-error"),
@@ -483,7 +486,7 @@ async function pickStation(s: Station) {
   await advance();
 }
 
-// ---- track search ----
+// ---- search ----
 
 el.openSearch.addEventListener("click", () => {
   show(el.search);
@@ -492,22 +495,31 @@ el.openSearch.addEventListener("click", () => {
   el.trackSearch.select();
 });
 
-// Back steps out of an open podcast first, then out of search.
+// Back steps out of an opened list first, then out of search.
 el.closeSearch.addEventListener("click", () => {
-  if (!podcast) return show(el.player);
-  podcast = null;
+  if (!trail.length) return show(el.player);
+  trail.pop();
   renderResults();
 });
 
-type SearchKind = "track" | "podcast";
-let searchKind: SearchKind = "track";
+type SearchKind = "music" | "podcast";
+let searchKind: SearchKind = "music";
 let searchTimer = 0;
 /** Bumped per query, so a slow reply cannot overwrite a newer one. */
 let searchSeq = 0;
-/** The last result list, kept so leaving a podcast does not search again. */
-let results: Track[] | Podcast[] | null = null;
-/** The podcast whose episodes are listed, if one is open. */
-let podcast: Podcast | null = null;
+/** The last result list, kept so stepping back does not search again. */
+let results: SearchAll | Podcast[] | null = null;
+
+/** A list opened from the results: an artist, an album, a podcast, or a
+ *  whole group. Rows are kept once loaded, so stepping back is instant. */
+interface Drill {
+  title: string;
+  empty: string;
+  load: () => Promise<HTMLElement[]>;
+  rows?: HTMLElement[];
+}
+/** Opened lists, innermost last. */
+const trail: Drill[] = [];
 
 el.trackSearch.addEventListener("input", () => {
   clearTimeout(searchTimer);
@@ -517,21 +529,21 @@ el.trackSearch.addEventListener("input", () => {
 function setKind(kind: SearchKind) {
   if (kind === searchKind) return;
   searchKind = kind;
-  el.kindTrack.classList.toggle("on", kind === "track");
+  el.kindMusic.classList.toggle("on", kind === "music");
   el.kindPodcast.classList.toggle("on", kind === "podcast");
-  el.trackSearch.placeholder = kind === "track" ? "Search tracks…" : "Search podcasts…";
+  el.trackSearch.placeholder = kind === "music" ? "Artists, tracks, albums…" : "Search podcasts…";
   el.trackSearch.focus();
   runSearch();
 }
 
-el.kindTrack.addEventListener("click", () => setKind("track"));
+el.kindMusic.addEventListener("click", () => setKind("music"));
 el.kindPodcast.addEventListener("click", () => setKind("podcast"));
 
 async function runSearch() {
   const text = el.trackSearch.value.trim();
   const seq = ++searchSeq;
   const kind = searchKind;
-  podcast = null;
+  trail.length = 0;
   results = null;
   showError(el.searchError, null);
   if (!text) return renderResults();
@@ -539,7 +551,7 @@ async function runSearch() {
   el.searchList.replaceChildren(hint("Searching…"));
   try {
     const found =
-      kind === "track" ? await api.searchTracks(text) : await api.searchPodcasts(text);
+      kind === "music" ? await api.searchAll(text) : await api.searchPodcasts(text);
     if (seq !== searchSeq) return;
     results = found;
     renderResults();
@@ -551,13 +563,68 @@ async function runSearch() {
 }
 
 function renderResults() {
+  const top = trail[trail.length - 1];
+  if (top) return void showDrill(top);
   el.searchTitle.textContent = "Search";
   if (!results) return el.searchList.replaceChildren();
   const rows =
-    searchKind === "track"
-      ? (results as Track[]).map((t) => trackRow(t, t.artist))
+    searchKind === "music"
+      ? musicRows(results as SearchAll)
       : (results as Podcast[]).map(podcastRow);
   el.searchList.replaceChildren(...(rows.length ? rows : [hint("Nothing found.")]));
+  el.searchList.scrollTop = 0;
+}
+
+function openDrill(title: string, load: () => Promise<HTMLElement[]>, empty = "Nothing here.") {
+  trail.push({ title, load, empty });
+  renderResults();
+}
+
+async function showDrill(d: Drill) {
+  el.searchTitle.textContent = d.title;
+  showError(el.searchError, null);
+  if (!d.rows) {
+    el.searchList.replaceChildren(hint("Loading…"));
+    try {
+      d.rows = await d.load();
+    } catch (e) {
+      if (trail[trail.length - 1] !== d) return;
+      el.searchList.replaceChildren();
+      showError(el.searchError, String(e));
+      return;
+    }
+    // Stepped back or searched again while it loaded.
+    if (trail[trail.length - 1] !== d) return;
+  }
+  el.searchList.replaceChildren(...(d.rows.length ? d.rows : [hint(d.empty)]));
+  el.searchList.scrollTop = 0;
+}
+
+/** Artists, then tracks, then albums, each cut to a few rows. */
+function musicRows(r: SearchAll) {
+  return [
+    ...group("Artists", r.artists, 3, artistRow),
+    ...group("Tracks", r.tracks, 5, (t) => trackRow(t, t.artist)),
+    ...group("Albums", r.albums, 4, albumRow),
+  ];
+}
+
+/** A titled slice of one kind of result; "Show all" opens the rest. */
+function group<T>(label: string, items: T[], preview: number, make: (item: T) => HTMLElement) {
+  if (!items.length) return [];
+  const head = document.createElement("li");
+  head.className = "station-group search-group muted small";
+  const name = document.createElement("span");
+  name.textContent = label;
+  head.append(name);
+  if (items.length > preview) {
+    const more = document.createElement("button");
+    more.className = "ghost small group-more";
+    more.textContent = "Show all";
+    more.addEventListener("click", () => openDrill(label, async () => items.map(make)));
+    head.append(more);
+  }
+  return [head, ...items.slice(0, preview).map(make)];
 }
 
 /** One list row: art, two lines of text, and a trailing note. */
@@ -597,10 +664,43 @@ function trackRow(t: Track, subtitle: string) {
   return li;
 }
 
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+
+function artistRow(a: Artist) {
+  const li = row(a.coverThumbUrl, a.name, plural(a.trackCount, "track"), "");
+  li.classList.add("artist");
+  // The artist is already the heading, so each row names its album instead.
+  li.addEventListener("click", () =>
+    openDrill(a.name, async () =>
+      (await api.artistTracks(a.id)).map((t) => trackRow(t, t.album || t.artist)),
+    ),
+  );
+  return li;
+}
+
+function albumRow(al: Album) {
+  const sub = al.year ? `${al.artist} · ${al.year}` : al.artist;
+  const li = row(al.coverThumbUrl, al.title, sub, plural(al.trackCount, "track"));
+  li.addEventListener("click", () =>
+    openDrill(al.title, async () =>
+      (await api.albumTracks(al.id)).map((t) => trackRow(t, t.artist)),
+    ),
+  );
+  return li;
+}
+
 function podcastRow(p: Podcast) {
-  const episodes = `${p.episodeCount} episode${p.episodeCount === 1 ? "" : "s"}`;
-  const li = row(p.coverThumbUrl, p.title, episodes, "");
-  li.addEventListener("click", () => openPodcast(p));
+  const li = row(p.coverThumbUrl, p.title, plural(p.episodeCount, "episode"), "");
+  li.addEventListener("click", () =>
+    openDrill(
+      p.title,
+      async () =>
+        (await api.albumTracks(p.id)).map((t) =>
+          trackRow(t, t.pubDate ? dateFmt.format(new Date(t.pubDate)) : p.title),
+        ),
+      "No episodes yet.",
+    ),
+  );
   return li;
 }
 
@@ -609,28 +709,6 @@ const dateFmt = new Intl.DateTimeFormat(undefined, {
   month: "short",
   year: "numeric",
 });
-
-/** List a podcast's episodes, newest first, in place of the results. */
-async function openPodcast(p: Podcast) {
-  const seq = ++searchSeq;
-  podcast = p;
-  el.searchTitle.textContent = p.title;
-  showError(el.searchError, null);
-  el.searchList.replaceChildren(hint("Loading episodes…"));
-  try {
-    const episodes = await api.podcastEpisodes(p.id);
-    if (seq !== searchSeq || podcast !== p) return;
-    const rows = episodes.map((t) =>
-      trackRow(t, t.pubDate ? dateFmt.format(new Date(t.pubDate)) : p.title),
-    );
-    el.searchList.replaceChildren(...(rows.length ? rows : [hint("No episodes yet.")]));
-    el.searchList.scrollTop = 0;
-  } catch (e) {
-    if (seq !== searchSeq) return;
-    el.searchList.replaceChildren();
-    showError(el.searchError, String(e));
-  }
-}
 
 /** Play a search result now; the wave picks up again after it. */
 async function playSearched(t: Track) {

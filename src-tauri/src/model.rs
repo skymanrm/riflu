@@ -51,7 +51,7 @@ pub struct Track {
     pub pub_date: Option<String>,
 }
 
-/// `/search`; only the block matching the requested `type` is present, and
+/// `/search`; only the blocks matching the requested `type` are present, and
 /// none at all when nothing matched.
 #[derive(Debug, Deserialize)]
 pub struct SearchResult {
@@ -59,12 +59,103 @@ pub struct SearchResult {
     pub tracks: Option<SearchBlock<Track>>,
     #[serde(default)]
     pub podcasts: Option<SearchBlock<Album>>,
+    #[serde(default)]
+    pub artists: Option<SearchBlock<Artist>>,
+    #[serde(default)]
+    pub albums: Option<SearchBlock<Album>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Cover {
+    #[serde(default)]
+    pub uri: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ArtistCounts {
+    #[serde(default)]
+    pub tracks: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Artist {
+    #[serde(deserialize_with = "flexible_id")]
+    pub id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub cover: Option<Cover>,
+    #[serde(default)]
+    pub counts: Option<ArtistCounts>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistView {
+    pub id: String,
+    pub name: String,
+    pub track_count: u32,
+    pub cover_thumb_url: Option<String>,
+}
+
+impl From<&Artist> for ArtistView {
+    fn from(a: &Artist) -> Self {
+        ArtistView {
+            id: a.id.clone(),
+            name: a.name.clone().unwrap_or_else(|| "Unknown artist".into()),
+            track_count: a.counts.as_ref().and_then(|c| c.tracks).unwrap_or(0),
+            cover_thumb_url: a.cover.as_ref().and_then(|c| c.uri.as_deref()).map(|u| cover_url(u, 100)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumView {
+    pub id: String,
+    pub title: String,
+    pub artist: String,
+    pub year: Option<u32>,
+    pub track_count: u32,
+    pub cover_thumb_url: Option<String>,
+}
+
+impl From<&Album> for AlbumView {
+    fn from(a: &Album) -> Self {
+        AlbumView {
+            id: a.id.clone(),
+            title: a.title.clone().unwrap_or_else(|| "Untitled".into()),
+            artist: join_names(&a.artists),
+            year: a.year,
+            track_count: a.track_count.unwrap_or(0),
+            cover_thumb_url: a.cover_uri.as_ref().map(|u| cover_url(u, 100)),
+        }
+    }
+}
+
+/// `/search?type=all`, cut down to the three groups the search screen shows.
+#[derive(Debug, Clone, Serialize)]
+pub struct SearchAllView {
+    pub artists: Vec<ArtistView>,
+    pub albums: Vec<AlbumView>,
+    pub tracks: Vec<TrackView>,
+}
+
+fn join_names(names: &[Named]) -> String {
+    names.iter().filter_map(|a| a.name.clone()).collect::<Vec<_>>().join(", ")
 }
 
 #[derive(Debug, Deserialize)]
 pub struct SearchBlock<T> {
     #[serde(default = "Vec::new")]
     pub results: Vec<T>,
+}
+
+impl<T> SearchBlock<T> {
+    /// A block's results in their frontend shape; a missing block is empty.
+    pub fn views<V: for<'a> From<&'a T>>(block: &Option<Self>) -> Vec<V> {
+        block.as_ref().map_or_else(Vec::new, |b| b.results.iter().map(V::from).collect())
+    }
 }
 
 /// A podcast is an album of `type: "podcast"` whose tracks are episodes.
@@ -79,6 +170,10 @@ pub struct Album {
     pub cover_uri: Option<String>,
     #[serde(default)]
     pub track_count: Option<u32>,
+    #[serde(default)]
+    pub year: Option<u32>,
+    #[serde(default)]
+    pub artists: Vec<Named>,
     /// `albums/{id}/with-tracks` only: episodes in groups, newest first.
     #[serde(default)]
     pub volumes: Vec<Vec<Track>>,
@@ -123,12 +218,7 @@ pub struct TrackView {
 
 impl From<&Track> for TrackView {
     fn from(t: &Track) -> Self {
-        let artist = t
-            .artists
-            .iter()
-            .filter_map(|a| a.name.clone())
-            .collect::<Vec<_>>()
-            .join(", ");
+        let artist = join_names(&t.artists);
         TrackView {
             id: t.id.clone(),
             title: t.title.clone().unwrap_or_else(|| "Unknown".into()),

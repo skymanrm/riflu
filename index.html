@@ -49,7 +49,9 @@
       </section>
 
       <!-- Player -->
-      <section id="player" class="screen hidden">
+      <!-- "deep" here covers the gaps between the parts too, which is all the
+           mini player has around its text. -->
+      <section id="player" class="screen hidden" data-tauri-drag-region="deep">
         <!-- "deep" drags the window from anywhere in the bar; the buttons on
              it are clickable elements, so they keep taking their own clicks. -->
         <header class="topbar" data-tauri-drag-region="deep">
@@ -61,8 +63,8 @@
           <span id="who" class="muted small"></span>
           <!-- Both glyphs are drawn in CSS: the matching characters have no
                glyph in the system font and render blank. -->
-          <button id="open-search" class="ghost small icon" title="Search tracks"
-                  aria-label="Search tracks">
+          <button id="open-search" class="ghost small icon" title="Search"
+                  aria-label="Search">
             <span class="search-glyph" aria-hidden="true"></span>
           </button>
           <button id="open-menu" class="ghost small icon" title="Menu" aria-label="Menu">
@@ -85,7 +87,9 @@
             <button id="play" class="primary round" title="Play/pause" aria-label="Play">
               <span id="play-glyph" class="glyph play"></span>
             </button>
-            <button id="next" class="ghost" title="Next">&rarr;</button>
+            <button id="next" class="ghost" title="Next" aria-label="Next">
+              <span class="glyph next" aria-hidden="true"></span>
+            </button>
             <!-- Island only: the way back to the full player. -->
             <button id="island-full" class="ghost icon" title="Full player"
                     aria-label="Full player">
@@ -132,7 +136,7 @@
         <ul id="station-list" class="station-list"></ul>
       </section>
 
-      <!-- Track search -->
+      <!-- Search -->
       <section id="search" class="screen hidden" data-tauri-drag-region="deep">
         <header class="topbar" data-tauri-drag-region="deep">
           <button id="close-search" class="ghost small">&larr; Back</button>
@@ -142,12 +146,12 @@
         </header>
 
         <div class="segmented" role="tablist">
-          <button id="kind-track" class="on" role="tab">Tracks</button>
+          <button id="kind-music" class="on" role="tab">Music</button>
           <button id="kind-podcast" role="tab">Podcasts</button>
         </div>
 
         <input id="track-search" class="search" type="search"
-               placeholder="Search tracks…" autocomplete="off" spellcheck="false" />
+               placeholder="Artists, tracks, albums…" autocomplete="off" spellcheck="false" />
 
         <p id="search-error" class="error hidden"></p>
         <ul id="search-list" class="station-list"></ul>

@@ -15,6 +15,7 @@ endif
 TAURI    := npm run tauri --
 APP      := src-tauri/target/release/bundle/macos/Riflu.app
 INSTALL  := /Applications/Riflu.app
+BUNDLE_ID := ru.fanyagin.riflu
 
 .DEFAULT_GOAL := help
 .PHONY: help deps dev check test probe mac dmg install windows clean
@@ -71,8 +72,9 @@ endif
 	$(TAURI) build --bundles app,dmg
 
 install: mac
+	@test -n "$(INSTALL)" || { echo "INSTALL is empty" >&2; exit 1; }
 	@echo "replacing $(INSTALL) — quitting it first if it is running"
-	-pkill -f "$(INSTALL)/Contents/MacOS" 2>/dev/null || true
+	-osascript -e 'if application id "$(BUNDLE_ID)" is running then tell application id "$(BUNDLE_ID)" to quit' 2>/dev/null || true
 	@sleep 1
 	rm -rf "$(INSTALL)"
 	ditto "$(APP)" "$(INSTALL)"

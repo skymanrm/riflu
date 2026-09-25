@@ -13,7 +13,7 @@ pub const EVT_NEXT: &str = "tray:next";
 pub fn build(app: &AppHandle) -> Result<TrayIcon> {
     let play_pause = MenuItem::with_id(app, "play-pause", "Play / Pause", true, None::<&str>)?;
     let next = MenuItem::with_id(app, "next", "Next track", true, None::<&str>)?;
-    let show = MenuItem::with_id(app, "show", "Show player", true, None::<&str>)?;
+    let toggle = MenuItem::with_id(app, "toggle", label(app), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Riflu", true, None::<&str>)?;
 
     let menu = Menu::with_items(
@@ -22,7 +22,7 @@ pub fn build(app: &AppHandle) -> Result<TrayIcon> {
             &play_pause,
             &next,
             &PredefinedMenuItem::separator(app)?,
-            &show,
+            &toggle,
             &PredefinedMenuItem::separator(app)?,
             &quit,
         ],
@@ -46,31 +46,55 @@ pub fn build(app: &AppHandle) -> Result<TrayIcon> {
         .menu(&menu)
         // Left click is play/pause, so the menu belongs on right click only.
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| match event.id().as_ref() {
+        .on_menu_event(move |app, event| match event.id().as_ref() {
             "play-pause" => {
                 let _ = app.emit(EVT_PLAY_PAUSE, ());
             }
             "next" => {
                 let _ = app.emit(EVT_NEXT, ());
             }
-            "show" => show_window(app),
+            "toggle" => {
+                if window_shown(app) {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.hide();
+                    }
+                } else {
+                    show_window(app);
+                }
+            }
             "quit" => app.exit(0),
             _ => {}
         })
-        .on_tray_icon_event(|tray, event| {
+        .on_tray_icon_event(move |tray, event| match event {
+            // Hovering always precedes the right click, so the label is fresh
+            // however the window was hidden (close button, ⌘H, this menu).
+            TrayIconEvent::Enter { .. } => {
+                let _ = toggle.set_text(label(tray.app_handle()));
+            }
             // Both Down and Up arrive; acting on one avoids a double toggle.
-            if let TrayIconEvent::Click {
+            TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
                 ..
-            } = event
-            {
+            } => {
                 let _ = tray.app_handle().emit(EVT_PLAY_PAUSE, ());
             }
+            _ => {}
         })
         .build(app)?;
 
     Ok(tray)
+}
+
+/// On screen, as opposed to hidden or minimised.
+fn window_shown(app: &AppHandle) -> bool {
+    app.get_webview_window("main").is_some_and(|w| {
+        w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false)
+    })
+}
+
+fn label(app: &AppHandle) -> &'static str {
+    if window_shown(app) { "Hide player" } else { "Show player" }
 }
 
 /// In menu-bar mode with the window hidden, this is the only way back.

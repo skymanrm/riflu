@@ -180,6 +180,19 @@ values **[V]** (2026-09-23, `text=qwe`). serde's derive rejects duplicate
 fields, so `api.rs` decodes every response through `serde_json::Value` first
 (last key wins).
 
+`/search?…&type=all` **[V]** (2026-09-25, `text=metallica`): answers every
+block at once — `best`, `tracks` (20), `clips` (10), `podcast_episodes` (20),
+`artists` (10), `podcasts`, `albums` (10), `playlists` (4) — each as
+`{total, perPage, order, results}`; `best` is `{type, result}`. Artists carry
+`id`, `name`, `cover.uri` (a `%%` template like `coverUri`) and
+`counts.tracks`; albums carry `artists`, `year`, `trackCount`, `metaType`
+(`"music"`). The search screen keeps only artists, tracks and albums.
+
+`/artists/{id}/tracks?page=0&page-size=50` **[V]** (2026-09-25): answers
+`{pager: {page, perPage, total}, tracks}`, most popular first, string ids.
+A music album's tracks come from `/albums/{id}/with-tracks` exactly as a
+podcast's episodes do (one volume per disc).
+
 Podcasts **[V]** (2026-09-23): `/search?…&type=podcast` answers
 `{podcasts: {total, results}}`, each result an album with `type` and
 `metaType` `"podcast"` and `trackCount`. `/albums/{id}/with-tracks` returns

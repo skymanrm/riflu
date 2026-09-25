@@ -190,11 +190,11 @@ Feedback failures are logged, never allowed to interrupt playback.
 - It is fixed-width with one height per mode, so `menu.rs` replaces
   `Menu::default` — the default carries View → Toggle Full Screen and
   Window → Zoom. Don't drop back to the default menu.
-- The mini player drops decorations entirely. macOS rebuilds the style mask on
-  its own schedule when they come back, wiping the overlaid title bar, the
-  disabled zoom button and the hidden traffic lights, so `apply_mini`
-  re-applies all three after a short delay. Doing it synchronously does not
-  stick. Leaving the island rebuilds the frame view too, so it re-hides them.
+- The mini player is borderless. `titlebar::set_framed` switches the style
+  mask itself, in one main-thread step, rather than via Tauri's
+  `set_decorations`: that restores a standard title bar (traffic lights,
+  content pushed down) which stays on screen until restyled. Leaving the
+  island rebuilds the frame view too, so it re-hides the buttons.
 - A borderless window gets no corner rounding from macOS, so the mini player
   rounds its own. That needs a transparent window (`macOSPrivateApi`), and the
   background has to be painted by `#app`: a background on `html` **or** `body`

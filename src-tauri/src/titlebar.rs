@@ -2,8 +2,43 @@
 //! frame (shadow, corners, resizing, ⌘W) but loses the traffic lights.
 
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSApplication, NSEvent, NSEventModifierFlags, NSEventType, NSWindow, NSWindowButton};
+use objc2_app_kit::{
+    NSApplication, NSEvent, NSEventModifierFlags, NSEventType, NSWindow, NSWindowButton,
+    NSWindowStyleMask, NSWindowTitleVisibility,
+};
 use tauri::WebviewWindow;
+
+/// Main thread only. Borderless for the mini player, or the full player's
+/// overlaid title bar, in one step: going through Tauri's decorations draws a
+/// standard title bar (buttons, content pushed down) until it is restyled.
+pub fn set_framed(w: &WebviewWindow, framed: bool) {
+    let Ok(ptr) = w.ns_window() else { return };
+    // SAFETY: as in `hide_buttons`.
+    let Some(ns) = (unsafe { (ptr as *const NSWindow).as_ref() }) else { return };
+    let resizable = ns.styleMask() & NSWindowStyleMask::Resizable;
+    let mask = if framed {
+        NSWindowStyleMask::Titled
+            | NSWindowStyleMask::Closable
+            | NSWindowStyleMask::Miniaturizable
+            | NSWindowStyleMask::FullSizeContentView
+    } else {
+        NSWindowStyleMask::Borderless
+    };
+    // A restyle drops keyboard focus; the search field should keep it.
+    let responder = ns.firstResponder();
+    ns.setStyleMask(mask | resizable);
+    if framed {
+        ns.setTitlebarAppearsTransparent(true);
+        ns.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+        if let Some(zoom) = ns.standardWindowButton(NSWindowButton::ZoomButton) {
+            zoom.setEnabled(false);
+        }
+    }
+    hide_buttons(w);
+    if let Some(r) = responder {
+        ns.makeFirstResponder(Some(&r));
+    }
+}
 
 /// Main thread only. A rebuilt frame view brings the buttons back, so this is
 /// re-run after anything that restores the title bar.

@@ -26,6 +26,29 @@ export interface Podcast {
   coverThumbUrl: string | null;
 }
 
+export interface Artist {
+  id: string;
+  name: string;
+  trackCount: number;
+  coverThumbUrl: string | null;
+}
+
+export interface Album {
+  id: string;
+  title: string;
+  artist: string;
+  year: number | null;
+  trackCount: number;
+  coverThumbUrl: string | null;
+}
+
+/** Music search, grouped by what matched. */
+export interface SearchAll {
+  artists: Artist[];
+  albums: Album[];
+  tracks: Track[];
+}
+
 export interface Playable {
   track: Track;
   url: string;
@@ -86,10 +109,12 @@ export const api = {
   waveSkipTo: (skipAhead: number) =>
     invoke<Playable | null>("wave_skip_to", { skipAhead }),
   waveRestart: () => invoke<void>("wave_restart"),
-  searchTracks: (text: string) => invoke<Track[]>("search_tracks", { text }),
+  searchAll: (text: string) => invoke<SearchAll>("search_all", { text }),
+  artistTracks: (id: string) => invoke<Track[]>("artist_tracks", { id }),
   trackPlay: (track: Track) => invoke<Playable>("track_play", { track }),
   searchPodcasts: (text: string) => invoke<Podcast[]>("search_podcasts", { text }),
-  podcastEpisodes: (id: string) => invoke<Track[]>("podcast_episodes", { id }),
+  /** A music album's tracks or a podcast's episodes. */
+  albumTracks: (id: string) => invoke<Track[]>("album_tracks", { id }),
   waveFeedback: (kind: Feedback, trackId?: string, playedSeconds?: number) =>
     invoke<void>("wave_feedback", { kind, trackId, playedSeconds }),
 

@@ -22,15 +22,15 @@ use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIcon;
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, LogicalSize, LogicalUnit, Manager, WindowEvent,
-    WindowSizeConstraints,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, LogicalUnit, Manager, PhysicalPosition,
+    WindowEvent, WindowSizeConstraints,
 };
 use tokio::sync::{Mutex, RwLock};
 
 use api::Api;
 use auth::DeviceCode;
 use error::{Error, Result};
-use model::{AccountView, PodcastView, StationView, TrackView};
+use model::{AccountView, PodcastView, SearchAllView, StationView, TrackView};
 use rotor::{WaveSession, MY_WAVE};
 use settings::Settings;
 
@@ -40,6 +40,42 @@ const MINI_SIZE: (f64, f64) = (320.0, 66.0);
 const FULL_WIDTH: f64 = 460.0;
 const FULL_MIN_HEIGHT: f64 = 560.0;
 const FULL_HEIGHT: f64 = 700.0;
+
+/// Physical window positions per size mode. A mode returns to where it last
+/// was unless the window has been moved since the previous switch.
+#[derive(Default)]
+struct Placement {
+    full: Option<PhysicalPosition<i32>>,
+    /// Logical height of the full player before it shrank.
+    full_height: Option<f64>,
+    mini: Option<PhysicalPosition<i32>>,
+    /// Where the current mode was put, to tell whether it has moved since.
+    placed: Option<PhysicalPosition<i32>>,
+}
+
+impl Placement {
+    /// A few pixels of slack: the frame can settle slightly after a restyle.
+    fn moved(&self, here: PhysicalPosition<i32>) -> bool {
+        self.placed
+            .map_or(true, |p| (p.x - here.x).abs() > 4 || (p.y - here.y).abs() > 4)
+    }
+
+    /// Clamp a window of `size` (logical) at `at` into the monitor's work area.
+    fn fit(
+        at: PhysicalPosition<i32>,
+        size: LogicalSize<f64>,
+        monitor: &tauri::Monitor,
+    ) -> PhysicalPosition<i32> {
+        let area = monitor.work_area();
+        let size = size.to_physical::<i32>(monitor.scale_factor());
+        let max_x = area.position.x + area.size.width as i32 - size.width;
+        let max_y = area.position.y + area.size.height as i32 - size.height;
+        PhysicalPosition::new(
+            at.x.min(max_x).max(area.position.x),
+            at.y.min(max_y).max(area.position.y),
+        )
+    }
+}
 
 #[derive(Default)]
 struct AppState {
@@ -52,8 +88,8 @@ struct AppState {
     settings: std::sync::RwLock<Settings>,
     /// Built once at startup and shown/hidden — recreating it flickers.
     tray: std::sync::Mutex<Option<TrayIcon>>,
-    /// Window height before shrinking to the mini player, to restore on expand.
-    full_height: std::sync::Mutex<Option<f64>>,
+    /// Where each size mode last sat, to put the window back on switching.
+    placement: std::sync::Mutex<Placement>,
     /// The window as it was before becoming the island; set while it is one.
     #[cfg(target_os = "macos")]
     island: std::sync::Mutex<Option<island::Saved>>,
@@ -295,13 +331,26 @@ fn apply_island(app: &AppHandle, on: bool, on_top: bool) {
 /// the full player stays free to grow downwards.
 fn apply_mini(w: &tauri::WebviewWindow, state: &AppState, mini: bool) {
     let logical = |v: f64| Some(LogicalUnit(v).into());
-    let (constraints, size) = if mini {
+    let here = w.outer_position().ok();
+    let monitor = w.current_monitor().ok().flatten();
+    let mut place = state.placement.lock().expect("placement lock");
+    let moved = here.map_or(true, |h| place.moved(h));
+
+    // Remember where the outgoing mode sat before anything changes.
+    if mini {
         if let (Ok(size), Ok(scale)) = (w.inner_size(), w.scale_factor()) {
             let height = size.to_logical::<f64>(scale).height;
             if height > MINI_SIZE.1 {
-                *state.full_height.lock().expect("size lock") = Some(height);
+                place.full_height = Some(height);
             }
         }
+        place.full = here;
+    } else {
+        place.mini = here;
+    }
+    let saved = if mini { place.mini } else { place.full };
+
+    let (constraints, size) = if mini {
         (
             WindowSizeConstraints {
                 min_width: logical(MINI_SIZE.0),
@@ -312,13 +361,10 @@ fn apply_mini(w: &tauri::WebviewWindow, state: &AppState, mini: bool) {
             LogicalSize::new(MINI_SIZE.0, MINI_SIZE.1),
         )
     } else {
-        let height = state
-            .full_height
-            .lock()
-            .expect("size lock")
-            .take()
-            .unwrap_or(FULL_HEIGHT)
-            .max(FULL_MIN_HEIGHT);
+        let mut height = place.full_height.unwrap_or(FULL_HEIGHT);
+        if let Some(m) = &monitor {
+            height = height.min(m.work_area().size.height as f64 / m.scale_factor());
+        }
         (
             WindowSizeConstraints {
                 min_width: logical(FULL_WIDTH),
@@ -326,30 +372,32 @@ fn apply_mini(w: &tauri::WebviewWindow, state: &AppState, mini: bool) {
                 min_height: logical(FULL_MIN_HEIGHT),
                 max_height: None,
             },
-            LogicalSize::new(FULL_WIDTH, height),
+            LogicalSize::new(FULL_WIDTH, height.max(FULL_MIN_HEIGHT)),
         )
     };
+
+    // Unmoved, the mode goes back where it was; moved, it opens where the
+    // window is now, kept on screen.
+    let target = if moved { here } else { saved.or(here) };
+    let target = match (target, &monitor) {
+        (Some(t), Some(m)) => Some(Placement::fit(t, size, m)),
+        (t, _) => t,
+    };
+    place.placed = target;
+    drop(place);
+
     // The mini player has no title bar at all; elsewhere there is never one.
+    // Restyled before resizing, both queued on the main thread in order.
     #[cfg(target_os = "macos")]
     {
-        let _ = w.set_decorations(!mini);
-        if !mini {
-            // Restoring decorations rebuilds the style mask on macOS's own
-            // schedule, undoing the overlaid title bar, the disabled zoom
-            // button and the hidden traffic lights. All three are re-applied
-            // once that has landed.
-            let w = w.clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_millis(120)).await;
-                let _ = w.set_title_bar_style(tauri::utils::TitleBarStyle::Overlay);
-                let _ = w.set_maximizable(false);
-                let handle = w.clone();
-                let _ = w.run_on_main_thread(move || titlebar::hide_buttons(&handle));
-            });
-        }
+        let handle = w.clone();
+        let _ = w.run_on_main_thread(move || titlebar::set_framed(&handle, !mini));
     }
     let _ = w.set_size_constraints(constraints);
     let _ = w.set_size(size);
+    if let Some(t) = target {
+        let _ = w.set_position(t);
+    }
 }
 
 /// Tray-only mode: the app gives up its Dock icon (macOS) or its taskbar
@@ -448,12 +496,17 @@ async fn take_next(state: &AppState, skip_ahead: usize) -> Result<Option<Playabl
 }
 
 #[tauri::command]
-async fn search_tracks(state: tauri::State<'_, AppState>, text: String) -> Result<Vec<TrackView>> {
+async fn search_all(state: tauri::State<'_, AppState>, text: String) -> Result<SearchAllView> {
     let text = text.trim();
     if text.is_empty() {
-        return Ok(vec![]);
+        return Ok(SearchAllView { artists: vec![], albums: vec![], tracks: vec![] });
     }
-    state.api().await?.search_tracks(text).await
+    state.api().await?.search_all(text).await
+}
+
+#[tauri::command]
+async fn artist_tracks(state: tauri::State<'_, AppState>, id: String) -> Result<Vec<TrackView>> {
+    state.api().await?.artist_tracks(&id).await
 }
 
 #[tauri::command]
@@ -468,9 +521,10 @@ async fn search_podcasts(
     state.api().await?.search_podcasts(text).await
 }
 
+/// A music album's tracks or a podcast's episodes; both are albums.
 #[tauri::command]
-async fn podcast_episodes(state: tauri::State<'_, AppState>, id: String) -> Result<Vec<TrackView>> {
-    state.api().await?.podcast_episodes(&id).await
+async fn album_tracks(state: tauri::State<'_, AppState>, id: String) -> Result<Vec<TrackView>> {
+    state.api().await?.album_tracks(&id).await
 }
 
 /// Play one track outside the wave. The session is left as it is, so the
@@ -614,9 +668,10 @@ pub fn run() {
             wave_skip_to,
             wave_queue,
             wave_restart,
-            search_tracks,
+            search_all,
+            artist_tracks,
             search_podcasts,
-            podcast_episodes,
+            album_tracks,
             track_play,
             wave_feedback,
             like_track,

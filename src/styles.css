@@ -111,6 +111,19 @@ button:disabled { opacity: 0.4; cursor: default; }
   border-left: 5px solid currentColor;
   border-right: 5px solid currentColor;
 }
+/* Two touching triangles, one line tall like the text buttons beside it. */
+.glyph.next {
+  display: flex;
+  align-items: center;
+  height: 1.5em;
+}
+.glyph.next::before,
+.glyph.next::after {
+  content: "";
+  border-left: 8px solid currentColor;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+}
 
 /* --- sign-in --- */
 .code-box {
@@ -453,10 +466,25 @@ button:disabled { opacity: 0.4; cursor: default; }
 }
 .station-kind { font-size: 11px; flex: 0 0 auto; }
 
+/* Search groups: the label, and "Show all" when the group is cut short. */
+.search-group { display: flex; align-items: center; justify-content: space-between; }
+.search-group .group-more {
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 2px 8px;
+  margin: -2px -8px -2px 0;
+}
+.queue-item.artist .queue-art { border-radius: 50%; }
+
 /* --- mini player --- */
 /* No window chrome: artwork, then "title · artist" over the progress bar,
    then the controls. The way back is the right-click menu. */
+/* Fills the window, so the margins around the rows are drag area too. */
 #player.mini {
+  margin: 0;
+  max-width: none;
+  height: 100vh;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
@@ -512,6 +540,12 @@ button:disabled { opacity: 0.4; cursor: default; }
   border-left-width: 13px;
   border-top-width: 8px;
   border-bottom-width: 8px;
+}
+#player.mini .glyph.next::before,
+#player.mini .glyph.next::after {
+  border-left-width: 7px;
+  border-top-width: 5px;
+  border-bottom-width: 5px;
 }
 #player.mini .glyph.pause {
   width: 12px; height: 14px;
